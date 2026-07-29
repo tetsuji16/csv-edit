@@ -12,8 +12,11 @@
   "bugs": {
     "url": "https://github.com/tetsuji16/csv-edit/issues"
   },
+  "sponsor": {
+    "url": "https://github.com/sponsors/tetsuji16"
+  },
   "license": "MIT",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "engines": {
     "vscode": "^1.130.0",
     "node": ">=20"

@@ -77,6 +77,13 @@ VS Code state rather than written into the CSV file.
 Read the full [privacy statement](PRIVACY.md) or see [support](SUPPORT.md) for
 help and issue reporting.
 
+## Support development
+
+If CSV Edit saves you time, you can
+[sponsor its continued development](https://github.com/sponsors/tetsuji16).
+Sponsorship supports maintenance, accessibility, performance work, and new
+releases.
+
 ## Requirements
 
 - Visual Studio Code 1.130 or newer
