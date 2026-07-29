@@ -28,13 +28,13 @@ export function activate(context: vscode.ExtensionContext) {
             const uri: vscode.Uri | undefined = input?.uri instanceof vscode.Uri ? (input.uri as vscode.Uri) : undefined;
             const path = uri?.fsPath || '(no-uri)';
             console.log(`[CSV(enable)]: group[${gi}] tab[${ti}] vt=${viewType ?? '(text?)'} uri=${path} active=${tab.isActive} preview=${tab.isPreview}`);
-            if (!input) return;
-            if (viewType === CsvEditorProvider.viewType) return; // already our editor
-            if (!uri) return;
+            if (!input) {return;}
+            if (viewType === CsvEditorProvider.viewType) {return;} // already our editor
+            if (!uri) {return;}
             const fsPath = uri.fsPath?.toLowerCase?.() || '';
             const isCsvLike = fsPath.endsWith('.csv') || fsPath.endsWith('.tsv') || fsPath.endsWith('.tab') || fsPath.endsWith('.psv');
             console.log(`[CSV(enable)]: -> eligible=${isCsvLike}`);
-            if (!isCsvLike) return;
+            if (!isCsvLike) {return;}
             candidates.push({ group, groupIndex: gi, tab, tabIndex: ti, uri, wasActive: tab.isActive, wasPreview: tab.isPreview, viewColumn: group.viewColumn });
           });
         });

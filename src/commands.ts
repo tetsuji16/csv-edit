@@ -22,7 +22,7 @@ async function toggleBooleanConfig(key: string, defaultVal: boolean, messagePref
 export function registerCsvCommands(context: vscode.ExtensionContext) {
   const getCsvUri = (): vscode.Uri | undefined => {
     const active = CsvEditorProvider.getActiveProvider();
-    if (active) return active.getDocumentUri();
+    if (active) {return active.getDocumentUri();}
     const input: any = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
     return input?.uri instanceof vscode.Uri ? input.uri : vscode.window.activeTextEditor?.document.uri;
   };
@@ -61,7 +61,7 @@ export function registerCsvCommands(context: vscode.ExtensionContext) {
         ['auto', 'light', 'dark'].map(value => ({ label: labels[value], value, picked: value === current })),
         { placeHolder: 'CSV Edit theme / テーマ' }
       );
-      if (!picked) return;
+      if (!picked) {return;}
       await vscode.workspace.getConfiguration('csvEdit').update('theme', picked.value, vscode.ConfigurationTarget.Global);
       CsvEditorProvider.editors.forEach(editor => editor.refresh());
     }),
@@ -188,7 +188,7 @@ export function registerCsvCommands(context: vscode.ExtensionContext) {
           g.tabs.forEach(t => {
             const inp: any = (t as any).input;
             const u: vscode.Uri | undefined = inp?.uri instanceof vscode.Uri ? (inp.uri as vscode.Uri) : undefined;
-            if (u && u.toString() === uri.toString()) toClose.push(t);
+            if (u && u.toString() === uri.toString()) {toClose.push(t);}
           });
         });
         if (toClose.length) {
@@ -218,7 +218,7 @@ export function registerCsvCommands(context: vscode.ExtensionContext) {
             const inp: any = (t as any).input;
             const vt = inp?.viewType;
             const u: vscode.Uri | undefined = inp?.uri instanceof vscode.Uri ? (inp.uri as vscode.Uri) : undefined;
-            if (u && u.toString() === uri.toString() && vt !== CsvEditorProvider.viewType) stale.push(t);
+            if (u && u.toString() === uri.toString() && vt !== CsvEditorProvider.viewType) {stale.push(t);}
           }));
           if (stale.length) {
             console.log(`[CSV(encoding)]: closing ${stale.length} stale text tab(s)`);
