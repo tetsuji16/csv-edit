@@ -39,6 +39,84 @@ let reorderState = null;
 
 const table = document.querySelector('#csv-root table');
 const scrollContainer = document.querySelector('.table-container');
+const csvPanel = document.getElementById('csvPanel');
+const csvPanelTitle = document.getElementById('csvPanelTitle');
+const panelResults = document.getElementById('panelResults');
+const dataToolActions = document.getElementById('dataToolActions');
+const selectionStatus = document.getElementById('selectionStatus');
+const sizeStatus = document.getElementById('sizeStatus');
+
+const setPanelOpen = (open, title = 'Data tools') => {
+  if (!csvPanel) return;
+  csvPanelTitle.textContent = title;
+  csvPanel.classList.toggle('open', open);
+};
+
+const updateModernStatus = () => {
+  if (selectionStatus) {
+    selectionStatus.textContent = currentSelection.length
+      ? `${currentSelection.length} cell${currentSelection.length === 1 ? '' : 's'} selected`
+      : 'Ready';
+  }
+  if (sizeStatus && table) {
+    const rows = new Set(Array.from(table.querySelectorAll('[data-row]')).map(el => el.getAttribute('data-row'))).size;
+    const cols = new Set(Array.from(table.querySelectorAll('[data-col]'))
+      .map(el => Number(el.getAttribute('data-col')))
+      .filter(col => col >= 0)).size;
+    sizeStatus.textContent = `${rows} rows × ${cols} columns`;
+  }
+};
+
+document.getElementById('viewTextButton')?.addEventListener('click', () => vscode.postMessage({ type: 'openTextView' }));
+document.getElementById('undoButton')?.addEventListener('click', () => vscode.postMessage({ type: 'undo' }));
+document.getElementById('redoButton')?.addEventListener('click', () => vscode.postMessage({ type: 'redo' }));
+document.getElementById('toolbarFind')?.addEventListener('click', () => openFindReplace(false));
+document.getElementById('toolbarTools')?.addEventListener('click', () => {
+  if (dataToolActions) dataToolActions.style.display = 'grid';
+  if (panelResults) panelResults.innerHTML = '';
+  setPanelOpen(true, 'Data tools / データツール');
+});
+document.getElementById('toolbarValidate')?.addEventListener('click', () => {
+  if (dataToolActions) dataToolActions.style.display = 'none';
+  if (panelResults) panelResults.textContent = 'Validating…';
+  setPanelOpen(true, 'Validation / 検証');
+  vscode.postMessage({ type: 'validateData' });
+});
+document.getElementById('toolbarTheme')?.addEventListener('click', () => vscode.postMessage({ type: 'cycleTheme' }));
+document.getElementById('toolbarFilter')?.addEventListener('click', () => {
+  if (dataToolActions) dataToolActions.style.display = 'none';
+  setPanelOpen(true, 'Filter / フィルター');
+  if (panelResults) {
+    panelResults.innerHTML = '<p><input id="quickFilterInput" type="search" placeholder="Contains…" aria-label="Filter rows" style="width:100%;box-sizing:border-box;padding:8px"></p><p id="quickFilterCount"></p>';
+    const input = document.getElementById('quickFilterInput');
+    input?.addEventListener('input', () => {
+      const query = input.value.toLocaleLowerCase();
+      let shown = 0;
+      table.querySelectorAll('tbody tr').forEach(row => {
+        const visible = !query || row.textContent.toLocaleLowerCase().includes(query);
+        row.style.display = visible ? '' : 'none';
+        if (visible) shown++;
+      });
+      document.getElementById('quickFilterCount').textContent = `${shown} visible rows`;
+    });
+    input?.focus();
+  }
+});
+
+dataToolActions?.addEventListener('click', event => {
+  const button = event.target.closest('button[data-tool]');
+  if (!button) return;
+  const action = button.dataset.tool;
+  let value;
+  if (action === 'fillEmpty') {
+    value = window.prompt('Value for empty cells / 空セルに入れる値', '');
+    if (value === null) return;
+  }
+  vscode.postMessage({ type: 'previewDataTool', request: { action, value } });
+});
+
+document.addEventListener('click', () => setTimeout(updateModernStatus, 0));
+setTimeout(updateModernStatus, 0);
 const dragIndicator = document.createElement('div');
 dragIndicator.style.position = 'fixed';
 dragIndicator.style.pointerEvents = 'none';
@@ -2042,7 +2120,38 @@ const copySelectionToClipboard = () => {
 
 window.addEventListener('message', event => {
   const message = event.data;
-  if(message.type === 'focus'){
+  if (message.type === 'uiCommand') {
+    if (message.command === 'find') openFindReplace(false);
+    if (message.command === 'replace') openFindReplace(true);
+    if (message.command === 'dataTools') document.getElementById('toolbarTools')?.click();
+    if (message.command === 'validate') document.getElementById('toolbarValidate')?.click();
+    if (message.command === 'filter') document.getElementById('toolbarFilter')?.click();
+  } else if (message.type === 'dataToolPreview') {
+    const changed = Number(message.changedCells) || 0;
+    const removed = Number(message.removedRows) || 0;
+    const summary = `${changed} cells will change; ${removed} rows will be removed.`;
+    if (panelResults) panelResults.textContent = summary;
+    if ((changed || removed) && window.confirm(`${summary}\n\nApply this change? / この変更を適用しますか？`)) {
+      vscode.postMessage({ type: 'applyDataTool', request: message.request });
+    }
+  } else if (message.type === 'validationResult') {
+    const issues = Array.isArray(message.issues) ? message.issues : [];
+    if (panelResults) {
+      panelResults.replaceChildren();
+      const summary = document.createElement('p');
+      summary.textContent = issues.length ? `${issues.length} issue(s) found.` : 'No issues found. / 問題はありません。';
+      panelResults.appendChild(summary);
+      if (issues.length) {
+        const list = document.createElement('ul');
+        issues.slice(0, 200).forEach(issue => {
+          const item = document.createElement('li');
+          item.textContent = String(issue.message || 'Validation issue');
+          list.appendChild(item);
+        });
+        panelResults.appendChild(list);
+      }
+    }
+  } else if(message.type === 'focus'){
     if (anchorCell) {
       try { anchorCell.focus({ preventScroll: true }); } catch { try { anchorCell.focus(); } catch {} }
     } else {

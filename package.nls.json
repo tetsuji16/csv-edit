@@ -1,0 +1,14 @@
+{
+  "extension.description": "A fast, modern spreadsheet editor for CSV, TSV, TAB and PSV files.",
+  "command.openGrid": "CSV Edit: Open as Grid",
+  "command.openText": "CSV Edit: Open as Text",
+  "command.toggleView": "CSV Edit: Toggle Grid/Text View",
+  "command.setTheme": "CSV Edit: Set Theme",
+  "command.find": "CSV Edit: Find",
+  "command.replace": "CSV Edit: Replace",
+  "command.toggleFilter": "CSV Edit: Toggle Filters",
+  "command.openDataTools": "CSV Edit: Open Data Tools",
+  "command.validate": "CSV Edit: Validate Data",
+  "config.defaultView": "The view used when opening CSV-like files. The view toggle updates this setting.",
+  "config.theme": "Color theme for CSV Edit. Auto follows the VS Code theme."
+}

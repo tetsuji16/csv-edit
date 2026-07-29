@@ -1,23 +1,41 @@
 {
-  "name": "csv",
-  "displayName": "CSV",
-  "publisher": "ReprEng",
-  "description": "Seamlessly Display and Edit CSVs",
+  "name": "csv-edit",
+  "displayName": "CSV Edit",
+  "publisher": "tetsuji16",
+  "description": "%extension.description%",
   "icon": "images/icon.jpg",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jonaraphael/csv.git"
+    "url": "https://github.com/tetsuji16/csv-edit.git"
   },
-  "version": "1.3.0",
+  "homepage": "https://github.com/tetsuji16/csv-edit#readme",
+  "bugs": {
+    "url": "https://github.com/tetsuji16/csv-edit/issues"
+  },
+  "license": "MIT",
+  "version": "0.1.0",
   "engines": {
-    "vscode": "^1.70.0",
-    "node": ">=14"
+    "vscode": "^1.130.0",
+    "node": ">=20"
   },
   "categories": [
     "Data Science",
     "Programming Languages",
-    "Other"
+    "Other",
+    "Visualization"
   ],
+  "keywords": [
+    "csv",
+    "tsv",
+    "spreadsheet",
+    "editor",
+    "data",
+    "excel"
+  ],
+  "galleryBanner": {
+    "color": "#111827",
+    "theme": "dark"
+  },
   "activationEvents": [
     "onLanguage:csv",
     "onLanguage:tsv",
@@ -29,7 +47,16 @@
     "onCommand:csv.changeFontFamily",
     "onCommand:csv.changeIgnoreRows",
     "onCommand:csv.changeEncoding",
-    "onCommand:csv.toggleClickableLinks"
+    "onCommand:csv.toggleClickableLinks",
+    "onCommand:csvEdit.openGrid",
+    "onCommand:csvEdit.openText",
+    "onCommand:csvEdit.toggleView",
+    "onCommand:csvEdit.setTheme",
+    "onCommand:csvEdit.find",
+    "onCommand:csvEdit.replace",
+    "onCommand:csvEdit.toggleFilter",
+    "onCommand:csvEdit.openDataTools",
+    "onCommand:csvEdit.validate"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -99,12 +126,78 @@
       {
         "command": "csv.toggleClickableLinks",
         "title": "CSV: Toggle Clickable Links"
+      },
+      {
+        "command": "csvEdit.openGrid",
+        "title": "%command.openGrid%"
+      },
+      {
+        "command": "csvEdit.openText",
+        "title": "%command.openText%"
+      },
+      {
+        "command": "csvEdit.toggleView",
+        "title": "%command.toggleView%"
+      },
+      {
+        "command": "csvEdit.setTheme",
+        "title": "%command.setTheme%"
+      },
+      {
+        "command": "csvEdit.find",
+        "title": "%command.find%"
+      },
+      {
+        "command": "csvEdit.replace",
+        "title": "%command.replace%"
+      },
+      {
+        "command": "csvEdit.toggleFilter",
+        "title": "%command.toggleFilter%"
+      },
+      {
+        "command": "csvEdit.openDataTools",
+        "title": "%command.openDataTools%"
+      },
+      {
+        "command": "csvEdit.validate",
+        "title": "%command.validate%"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "csvEdit.toggleView",
+          "when": "resourceExtname =~ /\\.(csv|tsv|tab|psv)$/",
+          "group": "navigation@1"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "CSV Extension Configuration",
       "properties": {
+        "csvEdit.defaultView": {
+          "type": "string",
+          "enum": [
+            "grid",
+            "text"
+          ],
+          "default": "grid",
+          "description": "%config.defaultView%",
+          "scope": "application"
+        },
+        "csvEdit.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "default": "auto",
+          "description": "%config.theme%",
+          "scope": "application"
+        },
         "csv.enabled": {
           "type": "boolean",
           "default": true,
@@ -213,7 +306,7 @@
     "customEditors": [
       {
         "viewType": "csv.editor",
-        "displayName": "CSV",
+        "displayName": "CSV Edit",
         "selector": [
           {
             "filenamePattern": "*.csv"
@@ -227,20 +320,23 @@
           {
             "filenamePattern": "*.psv"
           }
-        ]
+        ],
+        "priority": "default"
       }
     ]
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "vscode:prepublish": "npm run compile",
-    "lint": "eslint '**/*.ts'",
+    "vscode:prepublish": "npm run verify",
+    "lint": "eslint \"src/**/*.ts\"",
     "package": "vsce package",
-    "test": "npm run compile && node --test out/test"
+    "test": "npm run compile && node scripts/run-tests.cjs",
+    "verify": "npm run lint && npm test"
   },
   "dependencies": {
     "font-list": "^1.5.1",
-    "papaparse": "^5.5.3"
+    "papaparse": "^5.5.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
@@ -250,7 +346,7 @@
     "@typescript-eslint/parser": "^7.9.0",
     "@vscode/vsce": "^3.7.1",
     "eslint": "^8.57.0",
-    "typescript": "^4.4.3",
+    "typescript": "^5.9.3",
     "vscode": "^1.1.37"
   }
 }

@@ -1,0 +1,14 @@
+{
+  "extension.description": "CSV、TSV、TAB、PSV用の高速でモダンな表形式エディターです。",
+  "command.openGrid": "CSV Edit: グリッドで開く",
+  "command.openText": "CSV Edit: テキストで開く",
+  "command.toggleView": "CSV Edit: グリッド／テキスト表示を切り替える",
+  "command.setTheme": "CSV Edit: テーマを設定する",
+  "command.find": "CSV Edit: 検索",
+  "command.replace": "CSV Edit: 置換",
+  "command.toggleFilter": "CSV Edit: フィルターを切り替える",
+  "command.openDataTools": "CSV Edit: データツールを開く",
+  "command.validate": "CSV Edit: データを検証する",
+  "config.defaultView": "CSV系ファイルを開く表示です。表示切替時にこの設定も更新されます。",
+  "config.theme": "CSV Edit専用の配色です。自動ではVS Codeのテーマに追従します。"
+}

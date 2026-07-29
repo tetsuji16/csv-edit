@@ -3,7 +3,7 @@ import { CsvEditorProvider } from './CsvEditorProvider';
 import { registerCsvCommands } from './commands';
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('CSV: Extension activated');
+  console.log('CSV Edit: Extension activated');
 
   // Commands (toggle features, change separator/font)
   registerCsvCommands(context);
@@ -87,6 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const keys = [
+      'csvEdit.theme',
       'csv.fontFamily',
       'csv.cellPadding',
       'csv.columnColorMode',

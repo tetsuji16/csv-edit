@@ -1,6 +1,9 @@
 import Papa from 'papaparse';
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { applyDataTool, DataToolRequest, validateCsvRows } from './data-tools';
+import { CsvDocumentModel } from './csv-document-model';
+import { parseWebviewMessage } from './webview-protocol';
 
 type SeparatorMode = 'extension' | 'auto' | 'default';
 type SeparatorSettings = {
@@ -69,6 +72,7 @@ class CsvEditorController {
   private separatorCache: { version: number; configKey: string; separator: string } | undefined;
   private isDiffContext = false;
   private chunkRenderState: ChunkRenderState | undefined;
+  private readonly documentModel = new CsvDocumentModel();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -82,6 +86,11 @@ class CsvEditorController {
     this.document = document;
 
     const config = vscode.workspace.getConfiguration('csv', this.document.uri);
+    const csvEditConfig = vscode.workspace.getConfiguration('csvEdit', this.document.uri);
+    if (csvEditConfig.get<'grid' | 'text'>('defaultView', 'grid') === 'text') {
+      await this.openWithDefaultEditorAndClose(webviewPanel, document.uri);
+      return;
+    }
     if (!config.get<boolean>('enabled', true)) {
       // When disabled, immediately hand off to the default editor and close this tab
       await this.openWithDefaultEditorAndClose(webviewPanel, document.uri);
@@ -121,7 +130,12 @@ class CsvEditorController {
       }
     });
 
-    webviewPanel.webview.onDidReceiveMessage(async e => {
+    webviewPanel.webview.onDidReceiveMessage(async rawMessage => {
+      const e = parseWebviewMessage(rawMessage);
+      if (!e) {
+        console.warn('CSV Edit: ignored invalid webview message');
+        return;
+      }
       switch (e.type) {
         case 'editCell':
           this.updateDocument(e.row, e.col, e.value);
@@ -181,6 +195,40 @@ class CsvEditorController {
         case 'openLink':
           await this.openLinkExternally(e.url);
           break;
+        case 'previewDataTool':
+          await this.previewDataTool(e.request);
+          break;
+        case 'applyDataTool':
+          await this.applyDataTool(e.request);
+          break;
+        case 'validateData':
+          await this.validateData();
+          break;
+        case 'openTextView':
+          await vscode.workspace.getConfiguration('csvEdit').update(
+            'defaultView',
+            'text',
+            vscode.ConfigurationTarget.Global
+          );
+          await vscode.commands.executeCommand('vscode.openWith', this.document.uri, 'default', {
+            preview: false,
+            preserveFocus: false
+          });
+          break;
+        case 'undo':
+          await vscode.commands.executeCommand('undo');
+          break;
+        case 'redo':
+          await vscode.commands.executeCommand('redo');
+          break;
+        case 'cycleTheme': {
+          const cfg = vscode.workspace.getConfiguration('csvEdit');
+          const current = cfg.get<'auto' | 'light' | 'dark'>('theme', 'auto');
+          const next = current === 'auto' ? 'light' : current === 'light' ? 'dark' : 'auto';
+          await cfg.update('theme', next, vscode.ConfigurationTarget.Global);
+          CsvEditorProvider.editors.forEach(editor => editor.refresh());
+          break;
+        }
       }
     });
 
@@ -304,6 +352,11 @@ class CsvEditorController {
     }
   }
 
+  public postUiCommand(command: string, payload?: unknown): Thenable<boolean> {
+    return this.currentWebviewPanel?.webview.postMessage({ type: 'uiCommand', command, payload })
+      ?? Promise.resolve(false);
+  }
+
   private forceReload() {
     if (!this.currentWebviewPanel) return;
     const panel = this.currentWebviewPanel;
@@ -392,6 +445,59 @@ class CsvEditorController {
 
   public getCurrentSeparator(): string {
     return this.getSeparator();
+  }
+
+  private parseCurrentRows(): string[][] {
+    return this.documentModel.read(
+      this.document.version,
+      this.document.getText(),
+      this.getSeparator()
+    ).rows;
+  }
+
+  private async previewDataTool(request: DataToolRequest): Promise<void> {
+    const result = applyDataTool(this.parseCurrentRows(), request);
+    await this.currentWebviewPanel?.webview.postMessage({
+      type: 'dataToolPreview',
+      request,
+      changedCells: result.changedCells,
+      removedRows: result.removedRows,
+      samples: result.samples
+    });
+  }
+
+  private async applyDataTool(request: DataToolRequest): Promise<void> {
+    const result = applyDataTool(this.parseCurrentRows(), request);
+    if (!result.changedCells && !result.removedRows) return;
+    const snapshot = this.documentModel.read(
+      this.document.version,
+      this.document.getText(),
+      this.getSeparator()
+    );
+    const newText = this.documentModel.serialize(result.rows, snapshot);
+    const lastLine = Math.max(0, this.document.lineCount - 1);
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(
+      this.document.uri,
+      new vscode.Range(0, 0, lastLine, this.document.lineAt(lastLine).text.length),
+      newText
+    );
+    this.isUpdatingDocument = true;
+    try {
+      await vscode.workspace.applyEdit(edit);
+      this.updateWebviewContent();
+    } finally {
+      this.isUpdatingDocument = false;
+    }
+  }
+
+  private async validateData(): Promise<void> {
+    const rows = this.parseCurrentRows();
+    const issues = validateCsvRows(
+      rows,
+      CsvEditorProvider.getHeaderForUri(this.context, this.document.uri)
+    );
+    await this.currentWebviewPanel?.webview.postMessage({ type: 'validationResult', issues });
   }
 
   // ───────────── Document Editing Methods ─────────────
@@ -1368,8 +1474,13 @@ class CsvEditorController {
 
     let parsed;
     try {
-      parsed = Papa.parse(this.document.getText(), { dynamicTyping: false, delimiter: separator });
-      console.log(`CSV: Parsed CSV data with ${parsed.data.length} rows`);
+      parsed = {
+        data: this.documentModel.read(
+          this.document.version,
+          this.document.getText(),
+          separator
+        ).rows
+      };
     } catch (error) {
       console.error('CSV: Error parsing CSV content', error);
       parsed = { data: [] };
@@ -1454,7 +1565,13 @@ class CsvEditorController {
     const totalRows = data.length;
     const offset = Math.min(Math.max(0, hiddenRows), totalRows);
 
-    const isDark = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark;
+    const themePreference = (vscode as any).workspace?.getConfiguration?.('csvEdit')
+      ?.get?.('theme', 'auto') as 'auto' | 'light' | 'dark' | undefined ?? 'auto';
+    const isDark = themePreference === 'dark' || (
+      themePreference === 'auto' &&
+      (vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
+        vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast)
+    );
     let headerRow: string[] = [];
     let bodyData: string[][] = [];
     if (totalRows === 0 || offset >= totalRows) {
@@ -1470,7 +1587,8 @@ class CsvEditorController {
     let numColumns = visibleForWidth.reduce((max, row) => Math.max(max, row.length), 0);
     if (numColumns === 0) numColumns = 1; // ensure at least 1 column for the virtual row
 
-    const columnData = Array.from({ length: numColumns }, (_, i) => bodyData.map(row => row[i] || ''));
+    const typeSample = this.sampleRows(bodyData, 5_000);
+    const columnData = Array.from({ length: numColumns }, (_, i) => typeSample.map(row => row[i] || ''));
     const columnTypes = columnData.map(col => this.estimateColumnDataType(col));
     const useThemeForeground = columnColorMode === 'theme';
     const palette = columnColorPalette === 'cool'
@@ -1683,7 +1801,12 @@ class CsvEditorController {
     mouseWheelZoomInvert: boolean;
   }): string {
     const { webview, nonce, fontFamily, fontSize, cellPadding, separator, tableHtml, chunksJson, extraColumnColorCss, nextChunkStart, hasRemoteChunks, mouseWheelZoomEnabled, mouseWheelZoomInvert } = args;
-    const isDark = vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark;
+    const themePreference = vscode.workspace.getConfiguration('csvEdit').get<'auto' | 'light' | 'dark'>('theme', 'auto');
+    const isDark = themePreference === 'dark' || (
+      themePreference === 'auto' &&
+      (vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ||
+        vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.HighContrast)
+    );
     // Build script URI using file path for compatibility (older APIs may lack Uri.joinPath)
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'main.js'))
@@ -1701,8 +1824,30 @@ class CsvEditorController {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSV</title>
     <style nonce="${nonce}">
-      body { font-family: ${this.escapeCss(fontFamily)}; font-size: ${fontSize}px; margin: 0; padding: 0; user-select: none; }
-      .table-container { overflow: auto; height: 100vh; }
+      :root {
+        color-scheme: ${isDark ? 'dark' : 'light'};
+        --csv-bg: ${isDark ? '#111318' : '#ffffff'};
+        --csv-surface: ${isDark ? '#191c22' : '#f7f8fa'};
+        --csv-border: ${isDark ? '#30343c' : '#dfe3e8'};
+        --csv-text: ${isDark ? '#e7eaf0' : '#1f2937'};
+        --csv-muted: ${isDark ? '#9ca3af' : '#667085'};
+        --csv-accent: #4f8cff;
+      }
+      body { font-family: ${this.escapeCss(fontFamily)}; font-size: ${fontSize}px; margin: 0; padding: 0; user-select: none; background: var(--csv-bg); color: var(--csv-text); overflow: hidden; }
+      .csv-toolbar { height: 42px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--csv-border); background: var(--csv-surface); }
+      .csv-toolbar button { height: 30px; border: 0; border-radius: 6px; padding: 0 9px; background: transparent; color: var(--csv-text); cursor: pointer; font: inherit; }
+      .csv-toolbar button:hover, .csv-toolbar button:focus-visible { background: ${isDark ? '#292e37' : '#e9edf3'}; outline: none; }
+      .csv-toolbar .brand { font-weight: 650; margin-right: 8px; letter-spacing: .01em; }
+      .csv-toolbar .spacer { flex: 1; }
+      .table-container { overflow: auto; height: calc(100vh - 70px); }
+      .csv-status { height: 27px; box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 0 10px; border-top: 1px solid var(--csv-border); background: var(--csv-surface); color: var(--csv-muted); font-size: .86em; }
+      .csv-panel { position: fixed; z-index: 1100; top: 43px; right: 0; bottom: 28px; width: min(360px, 88vw); padding: 16px; box-sizing: border-box; border-left: 1px solid var(--csv-border); background: var(--csv-surface); box-shadow: -10px 0 30px rgba(0,0,0,.18); overflow: auto; display: none; }
+      .csv-panel.open { display: block; }
+      .csv-panel h2 { font-size: 1.05em; margin: 0 0 14px; }
+      .csv-panel .panel-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .csv-panel button { min-height: 34px; border: 1px solid var(--csv-border); border-radius: 6px; background: var(--csv-bg); color: var(--csv-text); cursor: pointer; }
+      .csv-panel button:hover { border-color: var(--csv-accent); }
+      .csv-panel ul { padding-left: 20px; }
       table { border-collapse: collapse; width: max-content; }
       th, td { padding: ${cellPadding}px 8px; border: 1px solid ${isDark ? '#555' : '#ccc'}; font-size: inherit; }
       th { position: sticky; top: 0; background-color: ${isDark ? '#1e1e1e' : '#ffffff'}; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -1893,10 +2038,40 @@ class CsvEditorController {
       ${extraColumnColorCss}
     </style>
   </head>
-  <body>
+  <body data-theme="${isDark ? 'dark' : 'light'}">
+    <header class="csv-toolbar" role="toolbar" aria-label="CSV Edit toolbar">
+      <span class="brand">CSV Edit</span>
+      <button id="viewTextButton" type="button" title="Open as text / テキストで開く">Text</button>
+      <button id="undoButton" type="button" title="Undo / 元に戻す">↶</button>
+      <button id="redoButton" type="button" title="Redo / やり直す">↷</button>
+      <button id="toolbarFind" type="button" title="Find / 検索">Find</button>
+      <button id="toolbarFilter" type="button" title="Filters / フィルター">Filter</button>
+      <button id="toolbarTools" type="button" title="Data tools / データツール">Tools</button>
+      <button id="toolbarValidate" type="button" title="Validate / 検証">Validate</button>
+      <span class="spacer"></span>
+      <button id="toolbarTheme" type="button" title="Theme / テーマ">${isDark ? '☾' : '☀'}</button>
+    </header>
     <div id="csv-root" class="table-container" data-sepcode="${sepCode}" data-fontsize="${fontSize}" data-wheelzoomenabled="${mouseWheelZoomEnabled ? '1' : '0'}" data-wheelzoominvert="${mouseWheelZoomInvert ? '1' : '0'}" data-nextchunkstart="${nextChunkStart >= 0 ? nextChunkStart : ''}" data-hasmorechunks="${hasRemoteChunks ? '1' : '0'}">
       ${tableHtml}
     </div>
+    <aside id="csvPanel" class="csv-panel" aria-label="CSV Edit tools">
+      <h2 id="csvPanelTitle">Data tools</h2>
+      <div id="dataToolActions" class="panel-actions">
+        <button data-tool="trim">Trim whitespace</button>
+        <button data-tool="uppercase">UPPERCASE</button>
+        <button data-tool="lowercase">lowercase</button>
+        <button data-tool="fillEmpty">Fill empty</button>
+        <button data-tool="removeEmptyRows">Remove empty rows</button>
+        <button data-tool="removeDuplicates">Remove duplicates</button>
+      </div>
+      <div id="panelResults" aria-live="polite"></div>
+    </aside>
+    <footer class="csv-status" role="status">
+      <span id="selectionStatus">Ready</span>
+      <span id="sizeStatus"></span>
+      <span>Delimiter: ${this.escapeHtml(separator === '\t' ? 'TAB' : separator)}</span>
+      <span>UTF-8</span>
+    </footer>
 
     <script id="__csvChunks" type="application/json" nonce="${nonce}">${chunksJson}</script>
 
@@ -1952,13 +2127,22 @@ class CsvEditorController {
   private computeColumnWidths(data: string[][]): number[] {
     const numColumns = data.reduce((max, row) => Math.max(max, row.length), 0);
     const widths = Array(numColumns).fill(0);
-    for (const row of data) {
+    for (const row of this.sampleRows(data, 10_000)) {
       for (let i = 0; i < numColumns; i++){
         widths[i] = Math.max(widths[i], (row[i] || '').length);
       }
     }
-    console.log(`CSV: Column widths: ${widths}`);
     return widths;
+  }
+
+  private sampleRows(rows: string[][], limit: number): string[][] {
+    if (rows.length <= limit) return rows;
+    const sample: string[][] = [];
+    const step = (rows.length - 1) / (limit - 1);
+    for (let i = 0; i < limit; i++) {
+      sample.push(rows[Math.round(i * step)]);
+    }
+    return sample;
   }
 
   private getSeparator(): string {

@@ -20,7 +20,56 @@ async function toggleBooleanConfig(key: string, defaultVal: boolean, messagePref
 }
 
 export function registerCsvCommands(context: vscode.ExtensionContext) {
+  const getCsvUri = (): vscode.Uri | undefined => {
+    const active = CsvEditorProvider.getActiveProvider();
+    if (active) return active.getDocumentUri();
+    const input: any = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    return input?.uri instanceof vscode.Uri ? input.uri : vscode.window.activeTextEditor?.document.uri;
+  };
+  const setView = async (view: 'grid' | 'text') => {
+    const uri = getCsvUri();
+    if (!uri) {
+      vscode.window.showInformationMessage('CSV Edit: Open a CSV-like file first.');
+      return;
+    }
+    await vscode.workspace.getConfiguration('csvEdit').update(
+      'defaultView',
+      view,
+      vscode.ConfigurationTarget.Global
+    );
+    await vscode.commands.executeCommand(
+      'vscode.openWith',
+      uri,
+      view === 'grid' ? CsvEditorProvider.viewType : 'default',
+      { preview: false, preserveFocus: false }
+    );
+  };
+  const post = (command: string) => CsvEditorProvider.getActiveProvider()?.postUiCommand(command);
+
   context.subscriptions.push(
+    vscode.commands.registerCommand('csvEdit.openGrid', () => setView('grid')),
+    vscode.commands.registerCommand('csvEdit.openText', () => setView('text')),
+    vscode.commands.registerCommand('csvEdit.toggleView', async () => {
+      const input: any = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+      const isGrid = input?.viewType === CsvEditorProvider.viewType || !!CsvEditorProvider.getActiveProvider()?.isActive();
+      await setView(isGrid ? 'text' : 'grid');
+    }),
+    vscode.commands.registerCommand('csvEdit.setTheme', async () => {
+      const current = vscode.workspace.getConfiguration('csvEdit').get<string>('theme', 'auto');
+      const labels: Record<string, string> = { auto: 'Auto / 自動', light: 'Light / ライト', dark: 'Dark / ダーク' };
+      const picked = await vscode.window.showQuickPick(
+        ['auto', 'light', 'dark'].map(value => ({ label: labels[value], value, picked: value === current })),
+        { placeHolder: 'CSV Edit theme / テーマ' }
+      );
+      if (!picked) return;
+      await vscode.workspace.getConfiguration('csvEdit').update('theme', picked.value, vscode.ConfigurationTarget.Global);
+      CsvEditorProvider.editors.forEach(editor => editor.refresh());
+    }),
+    vscode.commands.registerCommand('csvEdit.find', () => post('find')),
+    vscode.commands.registerCommand('csvEdit.replace', () => post('replace')),
+    vscode.commands.registerCommand('csvEdit.toggleFilter', () => post('filter')),
+    vscode.commands.registerCommand('csvEdit.openDataTools', () => post('dataTools')),
+    vscode.commands.registerCommand('csvEdit.validate', () => post('validate')),
     vscode.commands.registerCommand('csv.toggleExtension', () =>
       toggleBooleanConfig('enabled', true, 'CSV extension')
     ),

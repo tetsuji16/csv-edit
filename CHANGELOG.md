@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.0] - 2026-07-29
+
+- Rebranded as CSV Edit under publisher `tetsuji16`.
+- Added a globally remembered grid/text view toggle.
+- Added independent Auto, Light, and Dark editor themes.
+- Added a compact toolbar, status bar, quick filter, data tools, and validation panel.
+- Added preview-before-apply bulk transformations.
+- Added English and Japanese localization plus Marketplace release assets.
+- Added Zod-validated webview messages to reject malformed or unsafe operations.
+- Added a cached CSV document model that preserves BOM and line endings.
+- Reduced large-file width and type inference work through stratified sampling.
+- Upgraded the TypeScript toolchain and verified production dependencies have no known vulnerabilities.
+
 All notable changes to the "CSV" extension will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).

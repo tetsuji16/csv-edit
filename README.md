@@ -1,203 +1,104 @@
-# **CSV**
+# CSV Edit
 
-Experience a whole new way to work with CSV files right inside VS Code. CSV transforms your CSV files into an interactive, spreadsheet-like experience—making it effortless to view, edit, and navigate your data with precision and speed.
+A fast, modern spreadsheet editor for CSV files in Visual Studio Code.
 
----
+CSV Edit opens `.csv`, `.tsv`, `.tab`, and `.psv` files as an editable grid by
+default. It keeps the file as plain text, works with VS Code's save and undo
+model, and never uploads your data.
 
-## Screenshots
+> 日本語: CSV EditはCSV系ファイルを既定で表形式表示し、VS Code内で安全に
+> 編集できるローカル専用エディターです。
 
-![Dark Theme Screenshot](images/Screenshot_dark.png)
-![Light Theme Screenshot](images/Screenshot_light.png)
+![CSV Edit dark theme](https://raw.githubusercontent.com/tetsuji16/csv-edit/main/images/Screenshot_dark.png)
 
----
+## Highlights
 
-## Why CSV?
+- Spreadsheet editing with cell, range, row, and column selection
+- Excel-compatible copy and paste
+- Insert, delete, resize, and reorder rows and columns
+- Sort, quick filter, find and replace
+- Undo and redo through VS Code's document history
+- Data tools with a preview before applying bulk changes
+- Validation for ragged rows and invalid headers
+- Chunked rendering for large files
+- CSV, TSV, TAB, and PSV delimiter support
+- Per-file header, separator, sizing, scroll, and selection state
+- Grid/text view preference remembered globally
+- Independent Auto, Light, and Dark themes
+- English and Japanese command and setting labels
+- Runtime-validated editor messages and cached parsing for safer, faster editing
 
-Working with CSV files shouldn’t be a chore. With CSV, you get:
+## Views and theme
 
-- **Direct In-Place Editing:** Click on any cell to edit its content seamlessly. Your changes can be saved immediately to the CSV file, ensuring data integrity without extra steps.
-- **Smart Column Sizing & Dynamic Color Coding:** Columns automatically adjust to fit content while being visually distinguished by data type. Whether it’s boolean, date, integer, float, or text, each column gets its own adaptive color that adjusts for light and dark themes.
-- **Sticky Headers & Fluid Navigation:** Keep your header row always visible as you scroll. Effortlessly move through cells using intuitive keyboard shortcuts like `Tab`, `Shift + Tab`, and arrow keys—just like a full-featured spreadsheet.
-- **Efficient Multi-Cell Selection & Clipboard Integration:** Select a range of cells with click-and-drag and copy them as well-formatted CSV data using `Ctrl/Cmd + C`.
-- **Grid Paste Support:** Paste copied ranges directly into the selected cell/range with `Ctrl/Cmd + V` in selection mode.
-- **Robust Data Handling:** Leveraging the power of [Papa Parse](https://www.papaparse.com/), the extension handles complex CSV structures, special characters, and various data types gracefully.
-- **Theme-Optimized Interface:** Whether you prefer light or dark mode, CSV automatically adapts its styles for an optimal viewing experience.
+Use the **Text** button in the grid or the editor-title action to switch between
+the grid and VS Code's text editor. The last choice becomes the default for the
+next CSV-like file you open.
 
----
+Use the sun/moon button or **CSV Edit: Set Theme** to choose Auto, Light, or
+Dark. This changes CSV Edit only; it does not change the VS Code workbench.
 
-## Features
+## Data tools
 
-- **Interactive Editing:** Two modes — type to start a quick edit, or press Enter/double‑click for detail edit. Saves on blur.
-- **Smart Resizing:** Automatic calculation of column widths for improved readability.
-- **Dynamic Color Coding:** Visual cues based on data type help you quickly identify numbers, dates, booleans, and more (with opt‑in cool palette and theme-foreground mode settings).
-- **Sticky Headers:** Keep column titles in view as you scroll through large datasets.
-- **Enhanced Keyboard Navigation:** Navigate cells with arrows and Tab/Shift+Tab; quick edits can commit with arrow keys; `Ctrl/Cmd + A` selects all; `Ctrl/Cmd + C` copies selection.
-- **Advanced Multi-Cell Selection:** Easily select and copy blocks of data, then paste them elsewhere as properly formatted CSV.
-- **Add/Delete Columns:** Right-click any cell to add a column left or right, or remove the selected column.
-- **Add/Delete Rows:** Insert above/below or remove the selected row via context menu.
-- **Edit Empty CSVs:** Create or open an empty CSV file and start typing immediately.
-- **Column Sorting:** Right-click a header and choose A–Z or Z–A.
-- **Custom Font Controls:** Choose a font family and optional font-size override, or inherit VS Code defaults.
-- **In-View Zoom:** Use `Ctrl/Cmd + Mouse Wheel` or `Ctrl/Cmd + +/-/0` to zoom the CSV view without changing global editor zoom.
-- **Find & Replace Overlay:** Built-in find/replace bar with match options (case, whole-word, regex), keyboard navigation, and single/all replace actions across the full file (including chunked rows).
-- **Multiline Cell Display:** Cells with embedded newlines render as wrapped multi-line content (with preserved line breaks and matching row height).
-- **Clickable Links:** URLs in cells are automatically detected and displayed as clickable links. Ctrl/Cmd+click to open them in your browser.
-- **Preserved CSV Integrity:** All modifications respect CSV formatting—no unwanted extra characters or formatting issues.
-- **Optimized for Performance:** Designed for medium-sized datasets, ensuring a smooth editing experience without compromising on functionality.
-- **Large File Support:** Loads big CSVs in chunks so even large datasets open quickly.
-- **CSV/TSV/TAB/PSV Support:** `.csv`, `.tsv`, `.tab`, and `.psv` files are recognized automatically. Defaults: comma for CSV, tab for TSV/TAB, pipe for PSV.
+Open **Tools** to trim whitespace, change case, fill empty cells, remove empty
+rows, or remove duplicate rows. CSV Edit shows the number of affected cells and
+rows before applying the operation. Each accepted operation is one undo step.
 
----
+Open **Validate** to detect rows with inconsistent column counts, empty headers,
+and duplicate headers.
 
-## Compatibility
+## Keyboard
 
-This extension is built for VS Code **1.70.0** and later. It has been tested with
-Cursor (built on VS Code 1.99) and the latest VS Code releases (1.102).
-
-## Getting Started
-
-### 1. Install the Extension
-
-- Open Visual Studio Code.
-- Go to the Extensions view (`Ctrl+Shift+X` or `Cmd+Shift+X` on macOS).
-- Search for **CSV** and click **Install**.
-
-### 2. Open a CSV, TSV, TAB, or PSV File
-
-- Open any `.csv`, `.tsv`, `.tab`, or `.psv` file in VS Code.
-- The file will automatically load, presenting your data in an interactive grid view.
-
-### 3. Edit and Navigate
-
-- **Edit Modes:**
-  - Quick edit: start typing any character to edit the selected cell immediately. Press any Arrow key to save and move the selection to the next cell in that direction.
-  - Detail edit: press `Enter` on a selected cell or double‑click to enter a focused edit. Arrow Left/Right move the text caret; Arrow Up goes to start; Arrow Down goes to end. Click outside the cell (or blur) to save.
-- **Keyboard Navigation:** Use Arrow keys to move between cells when not editing. Use `Tab`/`Shift+Tab` to move horizontally (wrapping across rows as needed).
-- **Multi-Cell Selection:** Click and drag or use `Shift + Click` to select multiple cells, then copy them as CSV using `Ctrl/Cmd + C`.
-- **Find & Replace:** Press `Ctrl/Cmd + F` to open Find, or `Ctrl/Cmd + H` to open Find + Replace.
-
----
+| Action | Windows/Linux | macOS |
+|---|---|---|
+| Save | `Ctrl+S` | `Cmd+S` |
+| Undo / Redo | `Ctrl+Z` / `Ctrl+Y` | `Cmd+Z` / `Cmd+Shift+Z` |
+| Find / Replace | `Ctrl+F` / `Ctrl+H` | `Cmd+F` / `Cmd+H` |
+| Copy / Paste | `Ctrl+C` / `Ctrl+V` | `Cmd+C` / `Cmd+V` |
+| Select all | `Ctrl+A` | `Cmd+A` |
+| Edit cell | `Enter` or double-click | `Enter` or double-click |
+| New line in cell | `Shift+Enter` | `Shift+Enter` |
 
 ## Commands
 
-Open the Command Palette and search for:
+- `CSV Edit: Open as Grid`
+- `CSV Edit: Open as Text`
+- `CSV Edit: Toggle Grid/Text View`
+- `CSV Edit: Set Theme`
+- `CSV Edit: Find`
+- `CSV Edit: Replace`
+- `CSV Edit: Toggle Filters`
+- `CSV Edit: Open Data Tools`
+- `CSV Edit: Validate Data`
 
-- `CSV: Toggle Extension On/Off` (`csv.toggleExtension`)
-- `CSV: Toggle First Row as Header` (`csv.toggleHeader`)
-- `CSV: Toggle Serial Index Column` (`csv.toggleSerialIndex`)
-- `CSV: Change CSV Separator` (`csv.changeSeparator`)
-- `CSV: Reset CSV Separator (Inherit)` (`csv.resetSeparator`)
-- `CSV: Change Font Family` (`csv.changeFontFamily`)
-- `CSV: Hide First N Rows` (`csv.changeIgnoreRows`)
-- `CSV: Change File Encoding` (`csv.changeEncoding`)
-- `CSV: Toggle Clickable Links` (`csv.toggleClickableLinks`)
-  
+Legacy `CSV:` commands remain available for header, index, separator, encoding,
+font, and link settings.
 
-## Settings
+## Requirements
 
-Global (Settings UI or `settings.json`):
-
-- `csv.enabled` (boolean, default `true`): Enable/disable the custom editor.
-- `csv.fontFamily` (string, default empty): Override font family; falls back to `editor.fontFamily`.
-- `csv.fontSize` (number, default `0`): Override font size in px; set to `0` to inherit `editor.fontSize`.
-- `csv.mouseWheelZoom` (boolean, default `true`): Enable `Ctrl/Cmd + Mouse Wheel` zooming in the CSV editor.
-- `csv.mouseWheelZoomInvert` (boolean, default `false`): Invert the `Ctrl/Cmd + Mouse Wheel` zoom direction.
-- `csv.cellPadding` (number, default `4`): Vertical cell padding in pixels.
-- `csv.columnColorMode` (string, default `type`): `type` keeps CSV’s type-based column colors; `theme` uses your theme foreground color for all columns.
-- `csv.columnColorPalette` (string, default `default`): Type-color palette when `csv.columnColorMode` is `type`. `cool` biases colors toward greens/blues; `warm` biases colors toward oranges/reds.
-- `csv.diffUseThemeForeground` (boolean, default `true`): In compare/diff views, use theme foreground color so diff highlighting remains readable.
-- `csv.clickableLinks` (boolean, default `true`): Make URLs in cells clickable. Ctrl/Cmd+click to open links.
-- `csv.showTrailingEmptyRow` (boolean, default `true`): Show the extra empty row at the end of the table. Turn this off to hide that visual append row.
-- `csv.separatorMode` (string, default `extension`): Separator selection mode when no per-file override exists. `extension` uses extension mapping, `auto` detects from content first, `default` always uses `csv.defaultSeparator`.
-- `csv.defaultSeparator` (string, default `,`): Fallback separator. Use `\\t` in `settings.json` for tabs.
-- `csv.separatorByExtension` (object): Extension-to-separator mapping (defaults include `.csv`→`,`, `.tsv`/`.tab`→tab, `.psv`→`|`).
-- `csv.maxFileSizeMB` (number, default `10`): Soft limit for opening files in CSV view. If exceeded, CSV prompts: `Cancel`, `Continue This Time`, or `Ignore Forever` (sets this setting to `0`).
-- Per-file encoding: use `CSV: Change File Encoding` to set a file's encoding (e.g., `utf8`, `utf16le`, `windows1250`, `gbk`). The extension will reopen the file using the chosen encoding.
-
-Per-file (stored by the extension; set via commands):
-
-- First row as header (default `true`) — `CSV: Toggle First Row as Header`
-- Serial index column (default `true`) — `CSV: Toggle Serial Index Column`
-- CSV separator override — `CSV: Change CSV Separator` (or clear it with `CSV: Reset CSV Separator (Inherit)`)
-- Hide first N rows (default `0`) — `CSV: Hide First N Rows`
-
----
-
-## Editing Modes and Shortcuts
-
-- Quick edit:
-  - Start: type any character (not Enter) on a selected cell.
-  - Save and move: press Arrow Up/Down/Left/Right to save and select the adjacent cell; does not re-enter edit.
-- Detail edit:
-  - Start: press `Enter` on a selected cell or double‑click a cell.
-  - Caret navigation: Arrow Left/Right move one character; Arrow Up moves caret to start; Arrow Down moves caret to end.
-  - New line in cell: `Shift + Enter` inserts a line break inside the current cell.
-  - Exit/save: click outside the cell or move focus to commit changes.
-- Global:
-  - Copy selection: `Ctrl/Cmd + C`
-  - Paste selection: `Ctrl/Cmd + V` (selection mode). Pasting a single value into a selected rectangle fills that rectangle.
-  - Zoom in/out/reset: `Ctrl/Cmd + +`, `Ctrl/Cmd + -`, `Ctrl/Cmd + 0` (also `Ctrl/Cmd + Mouse Wheel`)
-  - Find: `Ctrl/Cmd + F`
-  - Replace: `Ctrl/Cmd + H`
-  - Next/Previous match: `F3` / `Shift + F3` (also `Enter` / `Shift + Enter` in the Find box)
-  - Select all: `Ctrl/Cmd + A`
-
----
-
-## Release Notes
-
-### v1.2.1
-- Fix scrolling freeze at ~1000 rows when header is enabled by unifying chunking behavior and safely transporting chunks to the webview.
-- Trim trailing empty lines to avoid phantom last rows; correct final virtual row numbering.
-- Preserve scroll position after edits/saves in later chunks by loading enough chunks before restoring scroll.
-- Add tests for separators (CSV/TSV overrides), strict date parsing, header heuristics, and chunking stability.
-
-### v1.2.0
-- Edit modes: Quick edit (type to start; arrows save and move) and Detail edit (Enter/double‑click; arrows move caret, Up/Down jump to start/end).
-- Virtual rows and cells: Always shows one extra empty row at the bottom; short rows display empty editable cells up to the widest column. Empty edits do not create real rows/columns.
-- State persistence: Keeps scroll position and selection across tab switches and configuration refreshes, including large files with chunked rendering.
-- Selection improvements: Shift+Click on headers selects column ranges; Shift+Click on the serial index selects row ranges; right‑click preserves current selection.
-- Batch actions: Context menu adapts to multi‑selection (Add/Delete X Rows/Columns) and performs exact counts in a single operation.
-- Delete to clear: Press Delete/Backspace to clear contents of selected cells (skips serial index column).
-- Copy fidelity: Copies with the active delimiter and skips the serial index column for full‑row copies.
-- Encoding: New command “CSV: Change File Encoding” integrates VS Code’s encoding picker and returns to the CSV view.
-- Enable/disable UX: Toggling the extension on instantly upgrades open CSV/TSV tabs to this view; toggling off reverts immediately to the default view.
-
-See full history in `CHANGELOG.md`.
-
----
+- Visual Studio Code 1.130 or newer
+- Windows, macOS, or Linux
 
 ## Development
 
-Clone the repository and run the following commands:
-
-```bash
-npm install
-npm run lint
-npm test
-```
-
-To create a VS Code extension package, run:
-
-```bash
+```sh
+npm ci
+npm run verify
 npm run package
 ```
 
-To compile without running tests:
+The package command creates an installable `.vsix`. Marketplace publishing is
+intentionally manual and requires credentials owned by publisher `tetsuji16`.
 
-```bash
-npm run compile
-```
+## Privacy and support
 
----
+See [PRIVACY.md](PRIVACY.md) and [SUPPORT.md](SUPPORT.md).
 
-## Support
+CSV Edit is MIT licensed and derived from
+[jonaraphael/csv](https://github.com/jonaraphael/csv). See [NOTICE](NOTICE).
 
-Have questions, suggestions, or encountered an issue?
-- Open an issue on [GitHub](https://github.com/jonaraphael/csv/issues) and let us know how we can help!
+## Architecture
 
----
-
-## License
-
-This extension is licensed under the [MIT License](LICENSE).
+Papa Parse is the single CSV parser/serializer. A cached document model
+preserves BOM and line endings, while Zod validates every message crossing the
+webview boundary. Large-file width and type inference use bounded stratified
+samples; row rendering continues to use on-demand chunks.
