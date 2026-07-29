@@ -46,7 +46,7 @@ export function applyDataTool(source: string[][], request: DataToolRequest): Dat
   if (request.action === 'removeDuplicates') {
     const seen = new Set<string>();
     rows = rows.filter((row, index) => {
-      if (index === 0) return true;
+      if (index === 0) {return true;}
       const key = JSON.stringify(row);
       if (seen.has(key)) {
         removedRows++;
@@ -59,16 +59,16 @@ export function applyDataTool(source: string[][], request: DataToolRequest): Dat
   }
 
   rows.forEach((row, rowIndex) => row.forEach((before, col) => {
-    if (selected && !selected.has(col)) return;
+    if (selected && !selected.has(col)) {return;}
     let after = before;
-    if (request.action === 'trim') after = before.trim();
-    if (request.action === 'uppercase') after = before.toLocaleUpperCase();
-    if (request.action === 'lowercase') after = before.toLocaleLowerCase();
-    if (request.action === 'fillEmpty' && before === '') after = request.value ?? '';
-    if (after === before) return;
+    if (request.action === 'trim') {after = before.trim();}
+    if (request.action === 'uppercase') {after = before.toLocaleUpperCase();}
+    if (request.action === 'lowercase') {after = before.toLocaleLowerCase();}
+    if (request.action === 'fillEmpty' && before === '') {after = request.value ?? '';}
+    if (after === before) {return;}
     row[col] = after;
     changedCells++;
-    if (samples.length < 8) samples.push({ row: rowIndex, col, before, after });
+    if (samples.length < 8) {samples.push({ row: rowIndex, col, before, after });}
   }));
 
   return { rows, changedCells, removedRows, samples };

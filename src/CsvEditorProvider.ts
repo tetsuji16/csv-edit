@@ -358,7 +358,7 @@ class CsvEditorController {
   }
 
   private forceReload() {
-    if (!this.currentWebviewPanel) return;
+    if (!this.currentWebviewPanel) {return;}
     const panel = this.currentWebviewPanel;
     // First, blank the DOM to ensure a full script/style reinit on next set
     panel.webview.html = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body></body></html>';
@@ -468,7 +468,7 @@ class CsvEditorController {
 
   private async applyDataTool(request: DataToolRequest): Promise<void> {
     const result = applyDataTool(this.parseCurrentRows(), request);
-    if (!result.changedCells && !result.removedRows) return;
+    if (!result.changedCells && !result.removedRows) {return;}
     const snapshot = this.documentModel.read(
       this.document.version,
       this.document.getText(),
@@ -932,7 +932,7 @@ class CsvEditorController {
   }
 
   private buildFindRegex(query: string, options: { regex: boolean; wholeWord: boolean; matchCase: boolean }): RegExp | undefined {
-    if (!query) return undefined;
+    if (!query) {return undefined;}
     const useRegex = !!options.regex;
     const wholeWord = !!options.wholeWord;
     const matchCase = !!options.matchCase;
@@ -1024,17 +1024,17 @@ class CsvEditorController {
       }
       data[row][col] = '';
     } else {
-      while (data.length <= row) data.push([]);
-      while (data[row].length <= col) data[row].push('');
+      while (data.length <= row) {data.push([]);}
+      while (data[row].length <= col) {data[row].push('');}
       data[row][col] = value;
     }
 
     let trimmed = false;
     if (wasEditingLastRow) {
       const isRowEmpty = (arr: string[] | undefined) => {
-        if (!arr || arr.length === 0) return true;
+        if (!arr || arr.length === 0) {return true;}
         for (let i = 0; i < arr.length; i++) {
-          if ((arr[i] ?? '') !== '') return false;
+          if ((arr[i] ?? '') !== '') {return false;}
         }
         return true;
       };
@@ -1072,7 +1072,7 @@ class CsvEditorController {
     const data = result.data as string[][];
     for (const row of data) {
       if (index > row.length) {
-        while (row.length < index) row.push('');
+        while (row.length < index) {row.push('');}
       }
       row.splice(index, 0, '');
     }
@@ -1090,7 +1090,7 @@ class CsvEditorController {
   }
 
   private async insertColumns(index: number, count: number) {
-    if (count <= 0) return;
+    if (count <= 0) {return;}
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
@@ -1099,7 +1099,7 @@ class CsvEditorController {
     for (let k = 0; k < count; k++) {
       for (const row of data) {
         if (index > row.length) {
-          while (row.length < index) row.push('');
+          while (row.length < index) {row.push('');}
         }
         row.splice(index, 0, '');
       }
@@ -1142,7 +1142,7 @@ class CsvEditorController {
   }
 
   private async deleteColumns(indices: number[]) {
-    if (!indices || !indices.length) return;
+    if (!indices || !indices.length) {return;}
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
@@ -1198,9 +1198,9 @@ class CsvEditorController {
       const sb = (b ?? '').trim();
       const aEmpty = sa === '';
       const bEmpty = sb === '';
-      if (aEmpty && bEmpty) return 0;
-      if (aEmpty) return 1; // empty sorts last
-      if (bEmpty) return -1;
+      if (aEmpty && bEmpty) {return 0;}
+      if (aEmpty) {return 1;} // empty sorts last
+      if (bEmpty) {return -1;}
 
       // Dates take precedence over numeric compare (avoid parseFloat on ISO)
       const aIsDate = this.isDate(sa);
@@ -1208,11 +1208,11 @@ class CsvEditorController {
       if (aIsDate && bIsDate) {
         const da = Date.parse(sa);
         const db = Date.parse(sb);
-        if (!isNaN(da) && !isNaN(db)) return da - db;
+        if (!isNaN(da) && !isNaN(db)) {return da - db;}
       }
 
       const na = parseFloat(sa), nb = parseFloat(sb);
-      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      if (!isNaN(na) && !isNaN(nb)) {return na - nb;}
       return sa.localeCompare(sb, undefined, { sensitivity: 'base' });
     };
 
@@ -1226,7 +1226,7 @@ class CsvEditorController {
 
     // Sanitize before unparse: ensure undefined/null/NaN become empty strings
     const sanitized: string[][] = combined.map(r => r.map((v: any) => {
-      if (v === undefined || v === null) return '';
+      if (v === undefined || v === null) {return '';}
       const t = typeof v;
       if (t === 'number') {
         return Number.isNaN(v) ? '' : String(v);
@@ -1261,7 +1261,7 @@ class CsvEditorController {
     const numColumns = data.reduce((max, r) => Math.max(max, r.length), 0);
     const newRow = Array(numColumns).fill('');
     if (index > data.length) {
-      while (data.length < index) data.push(Array(numColumns).fill(''));
+      while (data.length < index) {data.push(Array(numColumns).fill(''));}
     }
     data.splice(index, 0, newRow);
     const newText = Papa.unparse(data, { delimiter: separator });
@@ -1278,7 +1278,7 @@ class CsvEditorController {
   }
 
   private async insertRows(index: number, count: number) {
-    if (count <= 0) return;
+    if (count <= 0) {return;}
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
@@ -1288,7 +1288,7 @@ class CsvEditorController {
     for (let k = 0; k < count; k++) {
       const newRow = Array(numColumns).fill('');
       if (index > data.length) {
-        while (data.length < index) data.push(Array(numColumns).fill(''));
+        while (data.length < index) {data.push(Array(numColumns).fill(''));}
       }
       data.splice(index, 0, newRow);
     }
@@ -1328,7 +1328,7 @@ class CsvEditorController {
   }
 
   private async deleteRows(indices: number[]) {
-    if (!indices || !indices.length) return;
+    if (!indices || !indices.length) {return;}
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
@@ -1354,14 +1354,14 @@ class CsvEditorController {
   }
 
   private normalizeIndices(indices: unknown, maxExclusive: number): number[] {
-    if (!Array.isArray(indices) || maxExclusive <= 0) return [];
+    if (!Array.isArray(indices) || maxExclusive <= 0) {return [];}
     const seen = new Set<number>();
     const out: number[] = [];
     for (const raw of indices) {
       const num = Number(raw);
-      if (!Number.isFinite(num)) continue;
+      if (!Number.isFinite(num)) {continue;}
       const idx = Math.trunc(num);
-      if (idx < 0 || idx >= maxExclusive || seen.has(idx)) continue;
+      if (idx < 0 || idx >= maxExclusive || seen.has(idx)) {continue;}
       seen.add(idx);
       out.push(idx);
     }
@@ -1404,11 +1404,11 @@ class CsvEditorController {
       const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
       const data = result.data as string[][];
       const numColumns = data.reduce((max, row) => Math.max(max, row.length), 0);
-      if (numColumns <= 0) return;
+      if (numColumns <= 0) {return;}
 
       const sourceOrder = Array.from({ length: numColumns }, (_, i) => i);
       const { reordered: columnOrder, changed } = this.reorderByIndices(sourceOrder, indices, beforeIndex);
-      if (!changed) return;
+      if (!changed) {return;}
 
       const reorderedData = data.map(row => {
         const normalized = Array.from({ length: numColumns }, (_, i) => row[i] ?? '');
@@ -1441,10 +1441,10 @@ class CsvEditorController {
       const text = this.document.getText();
       const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
       const data = result.data as string[][];
-      if (!data.length) return;
+      if (!data.length) {return;}
 
       const { reordered, changed } = this.reorderByIndices(data, indices, beforeIndex);
-      if (!changed) return;
+      if (!changed) {return;}
 
       const newText = Papa.unparse(reordered, { delimiter: separator });
       const fullRange = new vscode.Range(
@@ -1464,7 +1464,7 @@ class CsvEditorController {
   // ───────────── Webview Rendering ─────────────
 
   private updateWebviewContent() {
-    if (!this.currentWebviewPanel) return;
+    if (!this.currentWebviewPanel) {return;}
 
     const webview = this.currentWebviewPanel.webview;
     const config = vscode.workspace.getConfiguration('csv', this.document.uri);
@@ -1585,7 +1585,7 @@ class CsvEditorController {
     }
     const visibleForWidth = headerFlag ? [headerRow, ...bodyData] : bodyData;
     let numColumns = visibleForWidth.reduce((max, row) => Math.max(max, row.length), 0);
-    if (numColumns === 0) numColumns = 1; // ensure at least 1 column for the virtual row
+    if (numColumns === 0) {numColumns = 1;} // ensure at least 1 column for the virtual row
 
     const typeSample = this.sampleRows(bodyData, 5_000);
     const columnData = Array.from({ length: numColumns }, (_, i) => typeSample.map(row => row[i] || ''));
@@ -1768,7 +1768,7 @@ class CsvEditorController {
 
     const total = data.length;
     const offset = Math.min(Math.max(0, hiddenRows), total);
-    if (total === 0 || offset >= total) return false; // nothing visible
+    if (total === 0 || offset >= total) {return false;} // nothing visible
 
     const headerRow = data[offset] || [];
     const body = data.slice(offset + 1);
@@ -2136,7 +2136,7 @@ class CsvEditorController {
   }
 
   private sampleRows(rows: string[][], limit: number): string[][] {
-    if (rows.length <= limit) return rows;
+    if (rows.length <= limit) {return rows;}
     const sample: string[][] = [];
     const step = (rows.length - 1) / (limit - 1);
     for (let i = 0; i < limit; i++) {
@@ -2147,7 +2147,7 @@ class CsvEditorController {
 
   private getSeparator(): string {
     const stored = CsvEditorProvider.getSeparatorForUri(this.context, this.document.uri);
-    if (stored && stored.length) return stored;
+    if (stored && stored.length) {return stored;}
 
     const settings = CsvEditorProvider.getSeparatorSettings(this.document.uri);
     const configKey = CsvEditorProvider.serializeSeparatorSettings(settings);
@@ -2187,9 +2187,9 @@ class CsvEditorController {
   }
 
   private isAllowedExternalUrl(rawUrl: unknown): rawUrl is string {
-    if (typeof rawUrl !== 'string') return false;
+    if (typeof rawUrl !== 'string') {return false;}
     const value = rawUrl.trim();
-    if (!value) return false;
+    if (!value) {return false;}
     try {
       const parsed = new URL(value);
       const scheme = parsed.protocol.replace(/:$/, '').toLowerCase();
@@ -2258,24 +2258,24 @@ class CsvEditorController {
   }
 
   private isDate(value: string): boolean {
-    if (!value) return false;
+    if (!value) {return false;}
     const v = value.trim();
     // Strictly match ISO-like date formats to avoid misclassifying plain numbers as dates.
     const isoDate = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
     const isoSlash = /^\d{4}\/\d{2}\/\d{2}$/;
-    if (!(isoDate.test(v) || isoSlash.test(v))) return false;
+    if (!(isoDate.test(v) || isoSlash.test(v))) {return false;}
     return !isNaN(Date.parse(v));
   }
 
   private isBooleanish(value: string): boolean {
     const v = (value ?? '').trim().toLowerCase();
-    if (!v) return false;
-    if (v === 'true' || v === 'false') return true;
-    if (v === 't' || v === 'f') return true;
-    if (v === 'yes' || v === 'no') return true;
-    if (v === 'y' || v === 'n') return true;
-    if (v === 'on' || v === 'off') return true;
-    if (v === '1' || v === '0') return true;
+    if (!v) {return false;}
+    if (v === 'true' || v === 'false') {return true;}
+    if (v === 't' || v === 'f') {return true;}
+    if (v === 'yes' || v === 'no') {return true;}
+    if (v === 'y' || v === 'n') {return true;}
+    if (v === 'on' || v === 'off') {return true;}
+    if (v === '1' || v === '0') {return true;}
     return false;
   }
 
@@ -2284,20 +2284,20 @@ class CsvEditorController {
     for (const cell of column) {
       const items = cell.split(',').map(item => item.trim());
       for (const item of items){
-        if (item === '') continue;
+        if (item === '') {continue;}
         allEmpty = false;
-        if (!this.isBooleanish(item)) allBoolean = false;
-        if (!this.isDate(item)) allDate = false;
+        if (!this.isBooleanish(item)) {allBoolean = false;}
+        if (!this.isDate(item)) {allDate = false;}
         const num = Number(item);
-        if (!Number.isInteger(num)) allInteger = false;
-        if (isNaN(num)) allFloat = false;
+        if (!Number.isInteger(num)) {allInteger = false;}
+        if (isNaN(num)) {allFloat = false;}
       }
     }
-    if (allEmpty) return "empty";
-    if (allBoolean) return "boolean";
-    if (allDate) return "date";
-    if (allInteger) return "integer";
-    if (allFloat) return "float";
+    if (allEmpty) {return "empty";}
+    if (allBoolean) {return "boolean";}
+    if (allDate) {return "date";}
+    if (allInteger) {return "integer";}
+    if (allFloat) {return "float";}
     return "string";
   }
 
@@ -2331,7 +2331,7 @@ class CsvEditorController {
         case "empty": isDefault = true; break;
       }
     }
-    if (isDefault) return isDark ? "#BBB" : "#444";
+    if (isDefault) {return isDark ? "#BBB" : "#444";}
     const saturationOffset = ((columnIndex * 7) % 31) - 15;
     const saturation = saturationOffset + (isDark ? 60 : 80);
     const lightnessOffset = ((columnIndex * 13) % 31) - 15;
@@ -2363,9 +2363,9 @@ class CsvEditorController {
 
   private trimTrailingEmptyRows(rows: string[][]): string[][] {
     const isEmpty = (r: string[] | undefined) => {
-      if (!r || r.length === 0) return true;
+      if (!r || r.length === 0) {return true;}
       for (let i = 0; i < r.length; i++) {
-        if ((r[i] ?? '') !== '') return false;
+        if ((r[i] ?? '') !== '') {return false;}
       }
       return true;
     };
@@ -2398,14 +2398,14 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
 
   private static normalizeExtension(rawExt: string): string {
     const trimmed = (rawExt ?? '').trim().toLowerCase();
-    if (!trimmed) return '';
+    if (!trimmed) {return '';}
     return trimmed.startsWith('.') ? trimmed : `.${trimmed}`;
   }
 
   private static normalizeSeparator(rawSep: unknown): string | undefined {
-    if (typeof rawSep !== 'string') return undefined;
-    if (rawSep.length === 0) return undefined;
-    if (rawSep === '\\t') return '\t';
+    if (typeof rawSep !== 'string') {return undefined;}
+    if (rawSep.length === 0) {return undefined;}
+    if (rawSep === '\\t') {return '\t';}
     return rawSep;
   }
 
@@ -2440,7 +2440,7 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
       for (const [rawExt, rawSep] of Object.entries(rawMap)) {
         const ext = CsvEditorProvider.normalizeExtension(rawExt);
         const sep = CsvEditorProvider.normalizeSeparator(rawSep);
-        if (!ext || !sep) continue;
+        if (!ext || !sep) {continue;}
         byExtension[ext] = sep;
       }
     }
@@ -2458,12 +2458,12 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
 
   private static resolveSeparatorFromExtension(filePath: string, settings: SeparatorSettings): string {
     const ext = CsvEditorProvider.normalizeExtension(path.extname((filePath ?? '').toLowerCase()));
-    if (!ext) return settings.defaultSeparator;
+    if (!ext) {return settings.defaultSeparator;}
     return settings.byExtension[ext] ?? settings.defaultSeparator;
   }
 
   private static countDelimiterOutsideQuotes(line: string, delimiter: string): number {
-    if (!delimiter) return 0;
+    if (!delimiter) {return 0;}
     let inQuotes = false;
     let count = 0;
     for (let i = 0; i < line.length; i++) {
@@ -2485,16 +2485,16 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   private static detectSeparatorFromText(text: string, candidates: string[]): string | undefined {
-    if (!text) return undefined;
+    if (!text) {return undefined;}
     const sampleText = text.length > 300000 ? text.slice(0, 300000) : text;
     const allLines = sampleText.split(/\r\n|\n|\r/);
     const lines: string[] = [];
     for (const line of allLines) {
-      if (line.trim().length === 0) continue;
+      if (line.trim().length === 0) {continue;}
       lines.push(line);
-      if (lines.length >= 200) break;
+      if (lines.length >= 200) {break;}
     }
-    if (lines.length === 0) return undefined;
+    if (lines.length === 0) {return undefined;}
 
     const minRowsWithDelimiter = lines.length === 1 ? 1 : 2;
     let best:
@@ -2508,10 +2508,10 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
       | undefined;
 
     for (const separator of candidates) {
-      if (!separator) continue;
+      if (!separator) {continue;}
       const counts = lines.map(line => CsvEditorProvider.countDelimiterOutsideQuotes(line, separator));
       const withDelimiter = counts.filter(count => count > 0);
-      if (withDelimiter.length < minRowsWithDelimiter) continue;
+      if (withDelimiter.length < minRowsWithDelimiter) {continue;}
 
       const frequencies = new Map<number, number>();
       for (const count of withDelimiter) {
@@ -2519,7 +2519,7 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
       }
       let modeRowCount = 0;
       for (const freq of frequencies.values()) {
-        if (freq > modeRowCount) modeRowCount = freq;
+        if (freq > modeRowCount) {modeRowCount = freq;}
       }
 
       const consistency = withDelimiter.length > 0 ? modeRowCount / withDelimiter.length : 0;
@@ -2553,7 +2553,7 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
       const candidates: string[] = [];
       const seen = new Set<string>();
       const push = (value: string | undefined) => {
-        if (!value || seen.has(value)) return;
+        if (!value || seen.has(value)) {return;}
         seen.add(value);
         candidates.push(value);
       };
@@ -2773,8 +2773,8 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
     sortByColumn(rows: string[][], index: number, ascending: boolean, treatHeader: boolean, hiddenRows: number): string[][] {
       // Trim trailing empty rows like runtime before sorting
       const isEmpty = (r: string[] | undefined) => {
-        if (!r || r.length === 0) return true;
-        for (let i = 0; i < r.length; i++) { if ((r[i] ?? '') !== '') return false; }
+        if (!r || r.length === 0) {return true;}
+        for (let i = 0; i < r.length; i++) { if ((r[i] ?? '') !== '') {return false;} }
         return true;
       };
       let end = rows.length;
@@ -2792,7 +2792,7 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
       }
       const isDateStr = (v: string) => {
         const s = (v ?? '').trim();
-        if (!s) return false;
+        if (!s) {return false;}
         const isoDate = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
         const isoSlash = /^\d{4}\/\d{2}\/\d{2}$/;
         return isoDate.test(s) || isoSlash.test(s);
@@ -2802,16 +2802,16 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
         const sb = (b ?? '').trim();
         const aEmpty = sa === '';
         const bEmpty = sb === '';
-        if (aEmpty && bEmpty) return 0;
-        if (aEmpty) return 1; // empty sorts last
-        if (bEmpty) return -1;
+        if (aEmpty && bEmpty) {return 0;}
+        if (aEmpty) {return 1;} // empty sorts last
+        if (bEmpty) {return -1;}
         if (isDateStr(sa) && isDateStr(sb)) {
           const da = Date.parse(sa);
           const db = Date.parse(sb);
-          if (!isNaN(da) && !isNaN(db)) return da - db;
+          if (!isNaN(da) && !isNaN(db)) {return da - db;}
         }
         const na = parseFloat(sa), nb = parseFloat(sb);
-        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        if (!isNaN(na) && !isNaN(nb)) {return na - nb;}
         return sa.localeCompare(sb, undefined, { sensitivity: 'base' });
       };
       body.sort((r1, r2) => {
@@ -2822,9 +2822,9 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
 
       // Apply same sanitation used before unparse in runtime path
       const combined = (treatHeader ? [...prefix, header, ...body] : [...prefix, ...body]).map(r => r.map((v: any) => {
-        if (v === undefined || v === null) return '';
+        if (v === undefined || v === null) {return '';}
         const t = typeof v;
-        if (t === 'number') return Number.isNaN(v) ? '' : String(v);
+        if (t === 'number') {return Number.isNaN(v) ? '' : String(v);}
         const s = String(v);
         return s.toLowerCase() === 'nan' ? '' : s;
       }));
@@ -2939,7 +2939,7 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
         for (const [rawExt, rawSep] of Object.entries(options.byExtension)) {
           const ext = CsvEditorProvider.normalizeExtension(rawExt);
           const sep = CsvEditorProvider.normalizeSeparator(rawSep);
-          if (!ext || !sep) continue;
+          if (!ext || !sep) {continue;}
           byExtension[ext] = sep;
         }
       }
