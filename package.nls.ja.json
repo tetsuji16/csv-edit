@@ -1,5 +1,5 @@
 {
-  "extension.description": "CSV、TSV、TAB、PSV用の高速でモダンな表形式エディターです。",
+  "extension.description": "jonaraphael/csvのforkを全面的に書き直した、ローカル完結型のCSV・TSV・TAB・PSVグリッドエディターです。",
   "command.openGrid": "CSV Edit: グリッドで開く",
   "command.openText": "CSV Edit: テキストで開く",
   "command.toggleView": "CSV Edit: グリッド／テキスト表示を切り替える",

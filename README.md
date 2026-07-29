@@ -1,62 +1,59 @@
 # CSV Edit
 
-A fast, modern spreadsheet editor for CSV files in Visual Studio Code.
+Edit delimited text as a spreadsheet without leaving Visual Studio Code.
 
-CSV Edit opens `.csv`, `.tsv`, `.tab`, and `.psv` files as an editable grid by
-default. It keeps the file as plain text, works with VS Code's save and undo
-model, and never uploads your data.
+CSV Edit opens CSV, TSV, TAB, and PSV files in a compact grid by default. The
+underlying document stays plain text, so normal saving, source control, diffs,
+and VS Code undo history continue to work. Processing is local-only.
 
-> 日本語: CSV EditはCSV系ファイルを既定で表形式表示し、VS Code内で安全に
-> 編集できるローカル専用エディターです。
+> CSV Editは、区切り形式のテキストをVS Code上で表として編集するための
+> ローカル完結型エディターです。
 
-![CSV Edit dark theme](https://raw.githubusercontent.com/tetsuji16/csv-edit/main/images/Screenshot_dark.png)
+## An independent rewrite
 
-## Highlights
+This repository is a GitHub fork of
+[jonaraphael/csv](https://github.com/jonaraphael/csv), retained so that the
+project's origin and MIT attribution remain visible.
 
-- Spreadsheet editing with cell, range, row, and column selection
-- Excel-compatible copy and paste
-- Insert, delete, resize, and reorder rows and columns
-- Sort, quick filter, find and replace
-- Undo and redo through VS Code's document history
-- Data tools with a preview before applying bulk changes
-- Validation for ragged rows and invalid headers
-- Chunked rendering for large files
-- CSV, TSV, TAB, and PSV delimiter support
-- Per-file header, separator, sizing, scroll, and selection state
-- Grid/text view preference remembered globally
-- Independent Auto, Light, and Dark themes
-- English and Japanese command and setting labels
-- Runtime-validated editor messages and cached parsing for safer, faster editing
+CSV Edit is a complete product and codebase rewrite. Its implementation,
+architecture, interface copy, documentation, icon, and Marketplace presentation
+were newly created for CSV Edit. The upstream project's README prose,
+screenshots, and Marketplace artwork are not reused.
 
-## Views and theme
+## What it does
 
-Use the **Text** button in the grid or the editor-title action to switch between
-the grid and VS Code's text editor. The last choice becomes the default for the
-next CSV-like file you open.
+- Opens `.csv`, `.tsv`, `.tab`, and `.psv` files directly in a grid
+- Edits cells, ranges, rows, and columns with keyboard or mouse
+- Copies and pastes tabular data in an Excel-compatible format
+- Inserts, removes, resizes, and reorders rows and columns
+- Sorts columns, filters visible rows, and searches or replaces values
+- Trims, changes case, fills blanks, and removes empty or duplicate rows
+- Previews bulk changes before applying them as one undoable operation
+- Reports uneven rows, empty headers, and duplicate headers
+- Preserves BOM, line endings, delimiters, quoted values, and multiline cells
+- Loads large documents in chunks and bounds expensive inference work
 
-Use the sun/moon button or **CSV Edit: Set Theme** to choose Auto, Light, or
-Dark. This changes CSV Edit only; it does not change the VS Code workbench.
+## Grid or text—your choice
 
-## Data tools
+Select **Text** in the grid, use the editor-title action, or run
+**CSV Edit: Toggle Grid/Text View**. CSV Edit remembers the last selection
+globally and uses it when the next supported file opens.
 
-Open **Tools** to trim whitespace, change case, fill empty cells, remove empty
-rows, or remove duplicate rows. CSV Edit shows the number of affected cells and
-rows before applying the operation. Each accepted operation is one undo step.
+Run **CSV Edit: Set Theme** to choose Auto, Light, or Dark. This preference
+affects only CSV Edit; Auto follows the active VS Code theme.
 
-Open **Validate** to detect rows with inconsistent column counts, empty headers,
-and duplicate headers.
+## Everyday shortcuts
 
-## Keyboard
-
-| Action | Windows/Linux | macOS |
-|---|---|---|
+| Action | Windows / Linux | macOS |
+| --- | --- | --- |
 | Save | `Ctrl+S` | `Cmd+S` |
-| Undo / Redo | `Ctrl+Z` / `Ctrl+Y` | `Cmd+Z` / `Cmd+Shift+Z` |
-| Find / Replace | `Ctrl+F` / `Ctrl+H` | `Cmd+F` / `Cmd+H` |
-| Copy / Paste | `Ctrl+C` / `Ctrl+V` | `Cmd+C` / `Cmd+V` |
-| Select all | `Ctrl+A` | `Cmd+A` |
-| Edit cell | `Enter` or double-click | `Enter` or double-click |
-| New line in cell | `Shift+Enter` | `Shift+Enter` |
+| Undo | `Ctrl+Z` | `Cmd+Z` |
+| Redo | `Ctrl+Y` | `Cmd+Shift+Z` |
+| Find | `Ctrl+F` | `Cmd+F` |
+| Replace | `Ctrl+H` | `Cmd+H` |
+| Copy / paste | `Ctrl+C` / `Ctrl+V` | `Cmd+C` / `Cmd+V` |
+| Edit the active cell | `Enter` | `Enter` |
+| Add a line inside a cell | `Shift+Enter` | `Shift+Enter` |
 
 ## Commands
 
@@ -70,15 +67,22 @@ and duplicate headers.
 - `CSV Edit: Open Data Tools`
 - `CSV Edit: Validate Data`
 
-Legacy `CSV:` commands remain available for header, index, separator, encoding,
-font, and link settings.
+## File handling and privacy
+
+CSV Edit does not send document contents to a server. Parsing, editing,
+filtering, transformation, and validation happen on your machine. Display state
+such as column widths, filters, scroll position, and theme choice is stored in
+VS Code state rather than written into the CSV file.
+
+Read the full [privacy statement](PRIVACY.md) or see [support](SUPPORT.md) for
+help and issue reporting.
 
 ## Requirements
 
 - Visual Studio Code 1.130 or newer
 - Windows, macOS, or Linux
 
-## Development
+## Build from source
 
 ```sh
 npm ci
@@ -86,19 +90,9 @@ npm run verify
 npm run package
 ```
 
-The package command creates an installable `.vsix`. Marketplace publishing is
-intentionally manual and requires credentials owned by publisher `tetsuji16`.
+The package command produces a `.vsix` that can be installed from VS Code.
 
-## Privacy and support
+## License and origin
 
-See [PRIVACY.md](PRIVACY.md) and [SUPPORT.md](SUPPORT.md).
-
-CSV Edit is MIT licensed and derived from
-[jonaraphael/csv](https://github.com/jonaraphael/csv). See [NOTICE](NOTICE).
-
-## Architecture
-
-Papa Parse is the single CSV parser/serializer. A cached document model
-preserves BOM and line endings, while Zod validates every message crossing the
-webview boundary. Large-file width and type inference use bounded stratified
-samples; row rendering continues to use on-demand chunks.
+CSV Edit is distributed under the MIT License. The original project copyright
+and derivation record are preserved in [LICENSE](LICENSE) and [NOTICE](NOTICE).
