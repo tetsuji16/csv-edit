@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 — 2026-07-30
+
+- Added GitHub Sponsors links to the repository and extension manifest.
+
 ## 0.1.1 — 2026-07-30
 
 - Re-created the GitHub repository as an official fork of `jonaraphael/csv`.
