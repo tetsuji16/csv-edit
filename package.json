@@ -16,7 +16,7 @@
     "url": "https://github.com/sponsors/tetsuji16"
   },
   "license": "MIT",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "engines": {
     "vscode": "^1.130.0",
     "node": ">=20"
