@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.3 — 2026-08-01
+
+- Rebuilt the editor shell as a spreadsheet-style interface with Home, Data,
+  and View ribbon tabs.
+- Added Excel-style column letters, row headers, active-cell borders, and a
+  compact worksheet status bar.
+- Added an editable name box and formula bar with apply and cancel controls.
+- Added direct ribbon actions for history, copying, row and column structure,
+  find, filtering, transformations, validation, and zoom.
+- Added responsive light and dark styling plus new original product screenshots.
+
 ## 0.1.2 — 2026-07-30
 
 - Added GitHub Sponsors links to the repository and extension manifest.

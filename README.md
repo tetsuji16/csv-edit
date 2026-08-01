@@ -9,6 +9,14 @@ and VS Code undo history continue to work. Processing is local-only.
 > CSV Editは、区切り形式のテキストをVS Code上で表として編集するための
 > ローカル完結型エディターです。
 
+![CSV Edit spreadsheet interface](https://raw.githubusercontent.com/tetsuji16/csv-edit/main/images/screenshot-light.png)
+
+The interface follows a familiar spreadsheet layout: a compact ribbon groups
+editing and data commands, the name box identifies the active cell, and the
+formula bar edits its complete value—including multiline text. Excel-style
+column letters, row numbers, selection borders, and a worksheet status bar keep
+large tables easy to navigate.
+
 ## An independent rewrite
 
 This repository is a GitHub fork of
@@ -24,6 +32,8 @@ screenshots, and Marketplace artwork are not reused.
 
 - Opens `.csv`, `.tsv`, `.tab`, and `.psv` files directly in a grid
 - Edits cells, ranges, rows, and columns with keyboard or mouse
+- Provides a spreadsheet ribbon, name box, and editable formula bar
+- Shows familiar column letters, row numbers, and active-cell borders
 - Copies and pastes tabular data in an Excel-compatible format
 - Inserts, removes, resizes, and reorders rows and columns
 - Sorts columns, filters visible rows, and searches or replaces values
