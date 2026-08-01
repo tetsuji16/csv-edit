@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.8 — 2026-08-01
+
+- Serialized document mutations to prevent rapid consecutive edits from
+  overwriting one another.
+- Restored editor update state after failed mutations so external document
+  changes continue to refresh the grid.
+- Corrected duplicate removal for headerless files and files with hidden
+  preamble rows.
+- Kept empty cells at the end of both ascending and descending sorts.
+
 ## 0.1.4 — 2026-08-01
 
 - Replaced the Excel-inspired title bar and ribbon with a compact VS Code-style
