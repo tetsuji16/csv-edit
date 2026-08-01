@@ -27,6 +27,7 @@ const getMinRowHeight = () => Math.max(22, Math.round(BASE_FONT_SIZE_PX * zoomSc
 let lastContextIsHeader = false;   // remembers whether we right-clicked a <th>
 let isUpdating = false, isSelecting = false, anchorCell = null, rangeEndCell = null, currentSelection = [];
 let startCell = null, endCell = null, selectionMode = "cell";
+let sheetColumnAnchor = null;
 let editingCell = null, originalCellValue = "";
 // Edit mode:
 //  - 'quick': started by typing a character (not Enter)
@@ -45,6 +46,57 @@ const panelResults = document.getElementById('panelResults');
 const dataToolActions = document.getElementById('dataToolActions');
 const selectionStatus = document.getElementById('selectionStatus');
 const sizeStatus = document.getElementById('sizeStatus');
+const visibleStatus = document.getElementById('visibleStatus');
+const zoomStatus = document.getElementById('zoomStatus');
+const formulaNameBox = document.getElementById('formulaNameBox');
+const formulaInput = document.getElementById('formulaInput');
+const formulaApply = document.getElementById('formulaApply');
+const formulaCancel = document.getElementById('formulaCancel');
+let formulaTarget = null;
+let formulaOriginalValue = '';
+let formulaDirty = false;
+
+const toColumnLabel = index => {
+  let value = Math.max(0, Number(index) || 0) + 1;
+  let label = '';
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+};
+
+const getActiveDataCell = () => {
+  const candidates = [anchorCell, ...currentSelection];
+  return candidates.find(cell => {
+    if (!cell?.getAttribute) return false;
+    const row = Number.parseInt(cell.getAttribute('data-row') || '', 10);
+    const col = Number.parseInt(cell.getAttribute('data-col') || '', 10);
+    return Number.isInteger(row) && Number.isInteger(col) && col >= 0;
+  }) || null;
+};
+
+const syncFormulaBar = () => {
+  const active = getActiveDataCell();
+  table?.querySelectorAll('.active-cell').forEach(cell => cell.classList.remove('active-cell'));
+  if (!active) {
+    formulaTarget = null;
+    if (formulaNameBox) formulaNameBox.value = currentSelection.length ? `${currentSelection.length} cells` : '';
+    if (formulaInput && document.activeElement !== formulaInput) formulaInput.value = '';
+    return;
+  }
+  active.classList.add('active-cell');
+  const row = Number.parseInt(active.getAttribute('data-row') || '0', 10);
+  const col = Number.parseInt(active.getAttribute('data-col') || '0', 10);
+  formulaTarget = { row, col, cell: active };
+  formulaOriginalValue = active.innerText || '';
+  if (formulaNameBox) formulaNameBox.value = `${toColumnLabel(col)}${row + 1}`;
+  if (formulaInput && document.activeElement !== formulaInput) {
+    formulaInput.value = formulaOriginalValue;
+    formulaDirty = false;
+  }
+};
 
 const setPanelOpen = (open, title = 'Data tools') => {
   if (!csvPanel) return;
@@ -53,9 +105,11 @@ const setPanelOpen = (open, title = 'Data tools') => {
 };
 
 const updateModernStatus = () => {
+  syncFormulaBar();
   if (selectionStatus) {
+    const address = formulaNameBox?.value || '';
     selectionStatus.textContent = currentSelection.length
-      ? `${currentSelection.length} cell${currentSelection.length === 1 ? '' : 's'} selected`
+      ? `${address}${address ? '  ·  ' : ''}${currentSelection.length} selected`
       : 'Ready';
   }
   if (sizeStatus && table) {
@@ -65,7 +119,38 @@ const updateModernStatus = () => {
       .filter(col => col >= 0)).size;
     sizeStatus.textContent = `${rows} rows × ${cols} columns`;
   }
+  if (visibleStatus && table) {
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    const visibleRows = rows.filter(row => row.style.display !== 'none').length;
+    visibleStatus.textContent = visibleRows === rows.length ? '' : `${visibleRows} visible`;
+  }
+  if (zoomStatus) zoomStatus.textContent = `${Math.round(zoomScale * 100)}%`;
 };
+let statusUpdateQueued = false;
+const queueModernStatusUpdate = () => {
+  if (statusUpdateQueued) return;
+  statusUpdateQueued = true;
+  window.requestAnimationFrame(() => {
+    statusUpdateQueued = false;
+    updateModernStatus();
+  });
+};
+
+const setRibbonTab = tabName => {
+  document.querySelectorAll('[data-ribbon-tab]').forEach(tab => {
+    const selected = tab.dataset.ribbonTab === tabName;
+    tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-ribbon-panel]').forEach(panel => {
+    const selected = panel.dataset.ribbonPanel === tabName;
+    panel.classList.toggle('active', selected);
+    panel.hidden = !selected;
+  });
+};
+
+document.querySelectorAll('[data-ribbon-tab]').forEach(tab => {
+  tab.addEventListener('click', () => setRibbonTab(tab.dataset.ribbonTab || 'home'));
+});
 
 document.getElementById('viewTextButton')?.addEventListener('click', () => vscode.postMessage({ type: 'openTextView' }));
 document.getElementById('undoButton')?.addEventListener('click', () => vscode.postMessage({ type: 'undo' }));
@@ -83,6 +168,35 @@ document.getElementById('toolbarValidate')?.addEventListener('click', () => {
   vscode.postMessage({ type: 'validateData' });
 });
 document.getElementById('toolbarTheme')?.addEventListener('click', () => vscode.postMessage({ type: 'cycleTheme' }));
+document.getElementById('csvPanelClose')?.addEventListener('click', () => setPanelOpen(false));
+document.getElementById('ribbonCopy')?.addEventListener('click', () => copySelectionToClipboard());
+document.getElementById('ribbonZoomOut')?.addEventListener('click', () => zoomOut());
+document.getElementById('ribbonZoomReset')?.addEventListener('click', () => resetZoom());
+document.getElementById('ribbonZoomIn')?.addEventListener('click', () => zoomIn());
+document.getElementById('ribbonAddRow')?.addEventListener('click', () => {
+  const active = getActiveDataCell();
+  if (!active) return;
+  const row = Number.parseInt(active.getAttribute('data-row') || '0', 10);
+  vscode.postMessage({ type: 'insertRows', index: row + 1, count: 1 });
+});
+document.getElementById('ribbonAddColumn')?.addEventListener('click', () => {
+  const active = getActiveDataCell();
+  if (!active) return;
+  const col = Number.parseInt(active.getAttribute('data-col') || '0', 10);
+  vscode.postMessage({ type: 'insertColumns', index: col + 1, count: 1 });
+});
+document.getElementById('ribbonDeleteRow')?.addEventListener('click', () => {
+  const active = getActiveDataCell();
+  if (!active) return;
+  const row = Number.parseInt(active.getAttribute('data-row') || '0', 10);
+  vscode.postMessage({ type: 'deleteRow', index: row });
+});
+document.getElementById('ribbonDeleteColumn')?.addEventListener('click', () => {
+  const active = getActiveDataCell();
+  if (!active) return;
+  const col = Number.parseInt(active.getAttribute('data-col') || '0', 10);
+  vscode.postMessage({ type: 'deleteColumn', index: col });
+});
 document.getElementById('toolbarFilter')?.addEventListener('click', () => {
   if (dataToolActions) dataToolActions.style.display = 'none';
   setPanelOpen(true, 'Filter / フィルター');
@@ -98,10 +212,52 @@ document.getElementById('toolbarFilter')?.addEventListener('click', () => {
         if (visible) shown++;
       });
       document.getElementById('quickFilterCount').textContent = `${shown} visible rows`;
+      updateModernStatus();
     });
     input?.focus();
   }
 });
+
+const restoreFormulaValue = () => {
+  if (formulaInput) formulaInput.value = formulaOriginalValue;
+  formulaDirty = false;
+  formulaInput?.blur();
+};
+
+const commitFormulaValue = () => {
+  if (!formulaTarget || !formulaInput) return;
+  const value = formulaInput.value;
+  if (value !== formulaOriginalValue) {
+    formulaTarget.cell.textContent = value;
+    vscode.postMessage({ type: 'editCell', row: formulaTarget.row, col: formulaTarget.col, value });
+    formulaOriginalValue = value;
+  }
+  formulaDirty = false;
+  formulaInput.blur();
+  updateModernStatus();
+};
+
+formulaInput?.addEventListener('focus', () => {
+  formulaOriginalValue = formulaInput.value;
+  formulaDirty = false;
+});
+formulaInput?.addEventListener('input', () => { formulaDirty = true; });
+formulaInput?.addEventListener('blur', event => {
+  if (formulaDirty && event.relatedTarget !== formulaApply && event.relatedTarget !== formulaCancel) {
+    commitFormulaValue();
+  }
+});
+formulaInput?.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    restoreFormulaValue();
+  } else if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
+    event.preventDefault();
+    commitFormulaValue();
+  }
+});
+formulaApply?.addEventListener('click', commitFormulaValue);
+formulaCancel?.addEventListener('click', restoreFormulaValue);
 
 dataToolActions?.addEventListener('click', event => {
   const button = event.target.closest('button[data-tool]');
@@ -116,6 +272,9 @@ dataToolActions?.addEventListener('click', event => {
 });
 
 document.addEventListener('click', () => setTimeout(updateModernStatus, 0));
+document.addEventListener('keyup', event => {
+  if (event.target !== formulaInput) queueModernStatusUpdate();
+});
 setTimeout(updateModernStatus, 0);
 const dragIndicator = document.createElement('div');
 dragIndicator.style.position = 'fixed';
@@ -446,6 +605,40 @@ const handleZoomWheel = e => {
 window.addEventListener('wheel', handleZoomWheel, { passive: false });
 
 const hasHeader = document.querySelector('thead') !== null;
+const installWorksheetHeaders = () => {
+  if (!table || table.querySelector('.sheet-column-letters')) return;
+  const columnIndices = Array.from(table.querySelectorAll('[data-col]'))
+    .map(cell => Number.parseInt(cell.getAttribute('data-col') || '', 10))
+    .filter(col => Number.isInteger(col) && col >= 0);
+  const maxColumn = columnIndices.length ? Math.max(...columnIndices) : 0;
+  let head = table.tHead;
+  if (!head) {
+    head = document.createElement('thead');
+    table.insertBefore(head, table.tBodies[0] || table.firstChild);
+  }
+  const row = document.createElement('tr');
+  row.className = 'sheet-column-letters';
+  if (table.querySelector('[data-col="-1"]')) {
+    const corner = document.createElement('th');
+    corner.className = 'sheet-corner';
+    corner.tabIndex = 0;
+    corner.setAttribute('aria-label', 'Select all cells');
+    corner.title = 'Select all / すべて選択';
+    row.appendChild(corner);
+  }
+  for (let col = 0; col <= maxColumn; col++) {
+    const header = document.createElement('th');
+    header.className = 'sheet-column-header';
+    header.dataset.sheetCol = String(col);
+    header.tabIndex = 0;
+    header.scope = 'col';
+    header.textContent = toColumnLabel(col);
+    header.setAttribute('aria-label', `Column ${toColumnLabel(col)}`);
+    row.appendChild(header);
+  }
+  head.insertBefore(row, head.firstChild);
+};
+installWorksheetHeaders();
 const getCellCoords = cell => ({ row: parseInt(cell.getAttribute('data-row')), col: parseInt(cell.getAttribute('data-col')) });
 const clearSelection = () => { currentSelection.forEach(c => c.classList.remove('selected')); currentSelection = []; };
 const contextMenu = document.getElementById('contextMenu');
@@ -826,13 +1019,13 @@ document.addEventListener('click', (e) => {
 table.addEventListener('contextmenu', e => {
   const target = getCellTarget(e.target);
   if (!target) return;
-  const colAttr = target.getAttribute('data-col');
+  const colAttr = target.getAttribute('data-col') ?? target.getAttribute('data-sheet-col');
   const rowAttr = target.getAttribute('data-row');
-  const col = parseInt(colAttr);
-  const row = parseInt(rowAttr);
+  const col = parseInt(colAttr ?? '', 10);
+  const row = parseInt(rowAttr ?? '', 10);
   if ((isNaN(col) || col === -1) && (isNaN(row) || row === -1)) return;
   e.preventDefault();
-  lastContextIsHeader = target.tagName === 'TH';
+  lastContextIsHeader = target.tagName === 'TH' && Number.isInteger(col) && col >= 0;
   showContextMenu(e.pageX, e.pageY, row, col);
 });
 
@@ -845,6 +1038,21 @@ table.addEventListener('mousedown', e => {
   }
   const target = getCellTarget(e.target);
   if (!target) return;
+
+  if (target.classList.contains('sheet-column-header')) {
+    e.preventDefault();
+    const col = Number.parseInt(target.dataset.sheetCol || '0', 10);
+    const previousCol = Number.isInteger(sheetColumnAnchor) ? sheetColumnAnchor : col;
+    selectFullColumnRange(e.shiftKey ? previousCol : col, col);
+    anchorCell = currentSelection.find(cell => cell.getAttribute('data-col') === String(col)) || currentSelection[0] || null;
+    rangeEndCell = anchorCell;
+    sheetColumnAnchor = col;
+    target.focus();
+    persistState();
+    updateModernStatus();
+    return;
+  }
+  sheetColumnAnchor = null;
 
   // Preserve selection on right-click; select target if outside current selection
   if (e.button === 2) { // right mouse button
@@ -1024,6 +1232,7 @@ const selectRange = (start, end) => {
       if(selCell){ selCell.classList.add('selected'); currentSelection.push(selCell); }
     }
   }
+  queueModernStatusUpdate();
 };
 
 const selectFullColumnRange = (col1, col2) => {
@@ -1037,6 +1246,7 @@ const selectFullColumnRange = (col1, col2) => {
       }
     });
   });
+  queueModernStatusUpdate();
 };
 
 const selectFullRowRange = (row1, row2) => {
@@ -1050,6 +1260,7 @@ const selectFullRowRange = (row1, row2) => {
       }
     });
   });
+  queueModernStatusUpdate();
 };
 
 const getDataCellCoords = cell => {
@@ -1934,7 +2145,14 @@ document.addEventListener('paste', e => {
   });
 });
 
-const selectAllCells = () => { clearSelection(); document.querySelectorAll('td, th').forEach(cell => { cell.classList.add('selected'); currentSelection.push(cell); }); };
+const selectAllCells = () => {
+  clearSelection();
+  table.querySelectorAll('td[data-col], th[data-col]').forEach(cell => {
+    cell.classList.add('selected');
+    currentSelection.push(cell);
+  });
+  queueModernStatusUpdate();
+};
 
 const setCursorToEnd = cell => { setTimeout(() => { 
   const range = document.createRange(); range.selectNodeContents(cell); range.collapse(false);
@@ -2068,6 +2286,9 @@ const editCell = (cell, event, mode = 'detail') => {
 
 table.addEventListener('dblclick', e => {
   const edgeTarget = getCellTarget(e.target);
+  if (edgeTarget?.classList.contains('sheet-column-header') || edgeTarget?.classList.contains('sheet-corner')) {
+    return;
+  }
   const edge = getResizeEdgeInfo(edgeTarget, e);
   if (edge) {
     e.preventDefault();
