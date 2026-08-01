@@ -1,5 +1,5 @@
 {
-  "extension.description": "VS Code向けに最適化された、高速でローカル完結型のCSV・TSV・TAB・PSVグリッドエディターです。jonaraphael/csvのforkを全面的に書き直しています。",
+  "extension.description": "CSV・TSV・TAB・PSVを高速なローカル完結グリッドで編集。テキスト形式、Gitの差分、VS Codeのワークフローをそのまま保ちます。",
   "command.openGrid": "CSV Edit: グリッドで開く",
   "command.openText": "CSV Edit: テキストで開く",
   "command.toggleView": "CSV Edit: グリッド／テキスト表示を切り替える",

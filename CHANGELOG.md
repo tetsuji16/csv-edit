@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 — 2026-08-02
+
+- Refreshed the GitHub and Marketplace introduction with clearer English and
+  Japanese product copy.
+- Added dedicated Marketplace hero and GitHub social preview artwork based on
+  the current CSV Edit icon and interface.
+
 ## 0.1.8 — 2026-08-01
 
 - Serialized document mutations to prevent rapid consecutive edits from
