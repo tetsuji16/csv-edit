@@ -10,8 +10,28 @@ test('bulk text tools only change selected columns and report samples', () => {
 });
 
 test('duplicate removal preserves header and first data occurrence', () => {
-  const result = applyDataTool([['id'], ['1'], ['1'], ['2']], { action: 'removeDuplicates' });
+  const result = applyDataTool(
+    [['id'], ['1'], ['1'], ['2']],
+    { action: 'removeDuplicates' },
+    { duplicateExemptRows: [0] }
+  );
   assert.deepEqual(result.rows, [['id'], ['1'], ['2']]);
+  assert.equal(result.removedRows, 1);
+});
+
+test('duplicate removal includes the first row when there is no header', () => {
+  const result = applyDataTool([['1'], ['1'], ['2']], { action: 'removeDuplicates' });
+  assert.deepEqual(result.rows, [['1'], ['2']]);
+  assert.equal(result.removedRows, 1);
+});
+
+test('duplicate removal can exempt a header after hidden preamble rows', () => {
+  const result = applyDataTool(
+    [['1'], ['id'], ['1'], ['1']],
+    { action: 'removeDuplicates' },
+    { duplicateExemptRows: [0, 1] }
+  );
+  assert.deepEqual(result.rows, [['1'], ['id'], ['1']]);
   assert.equal(result.removedRows, 1);
 });
 

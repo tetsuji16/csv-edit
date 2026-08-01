@@ -59,5 +59,11 @@ describe('Date column sort', () => {
     const asc = CsvEditorProvider.__test.sortByColumn(input, 0, true, false, 0).map(r => r[0]);
     assert.deepStrictEqual(asc, ['2017-01-01', '2017-01-03', '']);
   });
+
+  it('keeps empty dates last in descending', () => {
+    const input = [ ['2017-01-01'], [''], ['2017-01-03'] ];
+    const desc = CsvEditorProvider.__test.sortByColumn(input, 0, false, false, 0).map(r => r[0]);
+    assert.deepStrictEqual(desc, ['2017-01-03', '2017-01-01', '']);
+  });
 });
 
