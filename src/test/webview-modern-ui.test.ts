@@ -7,34 +7,44 @@ const provider = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'CsvEdi
 const webview = fs.readFileSync(path.join(__dirname, '..', '..', 'media', 'main.js'), 'utf8');
 const stylesheet = fs.readFileSync(path.join(__dirname, '..', '..', 'media', 'editor.css'), 'utf8');
 
-test('spreadsheet ribbon exposes view, theme, editing and data controls', () => {
+test('compact command bar exposes focused CSV editing controls', () => {
   for (const id of ['viewTextButton', 'toolbarFind', 'toolbarFilter', 'toolbarTools', 'toolbarValidate', 'toolbarTheme']) {
     assert.match(provider, new RegExp(`id="${id}"`));
-  }
-  for (const tab of ['home', 'data', 'view']) {
-    assert.match(provider, new RegExp(`data-ribbon-tab="${tab}"`));
-    assert.match(provider, new RegExp(`data-ribbon-panel="${tab}"`));
   }
   for (const id of ['ribbonAddRow', 'ribbonAddColumn', 'ribbonDeleteRow', 'ribbonDeleteColumn']) {
     assert.match(provider, new RegExp(`id="${id}"`));
   }
+  assert.match(provider, /class="csv-commandbar"/);
+  assert.match(provider, /class="command-overflow"/);
+  assert.doesNotMatch(provider, /sheet-titlebar|data-ribbon-tab|data-ribbon-panel/);
 });
 
-test('spreadsheet shell includes an editable formula bar and worksheet headers', () => {
+test('compact shell includes an editable selected-cell bar without spreadsheet chrome', () => {
   for (const id of ['formulaNameBox', 'formulaInput', 'formulaCancel', 'formulaApply']) {
     assert.match(provider, new RegExp(`id="${id}"`));
   }
   assert.match(provider, /media', 'editor\.css'/);
-  assert.match(webview, /installWorksheetHeaders/);
-  assert.match(webview, /sheet-column-letters/);
+  assert.match(provider, /data-rowcount=/);
+  assert.match(provider, /data-columncount=/);
+  assert.doesNotMatch(webview, /installWorksheetHeaders|sheet-column-letters|toColumnLabel/);
   assert.match(webview, /type: 'editCell', row: formulaTarget\.row/);
 });
 
-test('spreadsheet styling provides ribbon, formula bar, row headers and active-cell affordance', () => {
-  for (const selector of ['.csv-app-shell', '.ribbon-tabs', '.ribbon-panel', '.formula-bar', '.sheet-column-letters', '.active-cell']) {
+test('VS Code styling maximizes grid space and uses workbench theme tokens', () => {
+  for (const selector of ['.csv-workbench', '.csv-commandbar', '.command-menu', '.cell-bar', '.active-cell']) {
     assert.match(stylesheet, new RegExp(selector.replace('.', '\\.')));
   }
-  assert.match(stylesheet, /--sheet-accent:\s*#107c41/);
+  assert.match(stylesheet, /grid-template-rows:\s*32px 30px minmax\(0, 1fr\) 22px/);
+  assert.match(provider, /--vscode-editor-background/);
+  assert.match(provider, /--vscode-focusBorder/);
+  assert.match(stylesheet, /--vscode-editor-selectionBackground/);
+  assert.doesNotMatch(stylesheet, /#217346|--sheet-titlebar|--sheet-accent/);
+});
+
+test('status updates use document metadata rather than scanning every rendered cell', () => {
+  assert.match(webview, /root\?\.dataset\?\.rowcount/);
+  assert.match(webview, /root\?\.dataset\?\.columncount/);
+  assert.doesNotMatch(webview, /new Set\(Array\.from\(table\.querySelectorAll\('\[data-row\]'\)\)/);
 });
 
 test('bulk data tools use preview and explicit apply messages', () => {

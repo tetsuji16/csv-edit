@@ -56,17 +56,6 @@ let formulaTarget = null;
 let formulaOriginalValue = '';
 let formulaDirty = false;
 
-const toColumnLabel = index => {
-  let value = Math.max(0, Number(index) || 0) + 1;
-  let label = '';
-  while (value > 0) {
-    value -= 1;
-    label = String.fromCharCode(65 + (value % 26)) + label;
-    value = Math.floor(value / 26);
-  }
-  return label;
-};
-
 const getActiveDataCell = () => {
   const candidates = [anchorCell, ...currentSelection];
   return candidates.find(cell => {
@@ -91,7 +80,7 @@ const syncFormulaBar = () => {
   const col = Number.parseInt(active.getAttribute('data-col') || '0', 10);
   formulaTarget = { row, col, cell: active };
   formulaOriginalValue = active.innerText || '';
-  if (formulaNameBox) formulaNameBox.value = `${toColumnLabel(col)}${row + 1}`;
+  if (formulaNameBox) formulaNameBox.value = `R${row + 1}:C${col + 1}`;
   if (formulaInput && document.activeElement !== formulaInput) {
     formulaInput.value = formulaOriginalValue;
     formulaDirty = false;
@@ -110,19 +99,12 @@ const updateModernStatus = () => {
     const address = formulaNameBox?.value || '';
     selectionStatus.textContent = currentSelection.length
       ? `${address}${address ? '  ·  ' : ''}${currentSelection.length} selected`
-      : 'Ready';
+      : 'No selection';
   }
-  if (sizeStatus && table) {
-    const rows = new Set(Array.from(table.querySelectorAll('[data-row]')).map(el => el.getAttribute('data-row'))).size;
-    const cols = new Set(Array.from(table.querySelectorAll('[data-col]'))
-      .map(el => Number(el.getAttribute('data-col')))
-      .filter(col => col >= 0)).size;
-    sizeStatus.textContent = `${rows} rows × ${cols} columns`;
-  }
-  if (visibleStatus && table) {
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
-    const visibleRows = rows.filter(row => row.style.display !== 'none').length;
-    visibleStatus.textContent = visibleRows === rows.length ? '' : `${visibleRows} visible`;
+  if (sizeStatus) {
+    const rows = Number.parseInt(root?.dataset?.rowcount || '0', 10);
+    const cols = Number.parseInt(root?.dataset?.columncount || '0', 10);
+    sizeStatus.textContent = `${rows} rows · ${cols} columns`;
   }
   if (zoomStatus) zoomStatus.textContent = `${Math.round(zoomScale * 100)}%`;
 };
@@ -135,22 +117,6 @@ const queueModernStatusUpdate = () => {
     updateModernStatus();
   });
 };
-
-const setRibbonTab = tabName => {
-  document.querySelectorAll('[data-ribbon-tab]').forEach(tab => {
-    const selected = tab.dataset.ribbonTab === tabName;
-    tab.setAttribute('aria-selected', selected ? 'true' : 'false');
-  });
-  document.querySelectorAll('[data-ribbon-panel]').forEach(panel => {
-    const selected = panel.dataset.ribbonPanel === tabName;
-    panel.classList.toggle('active', selected);
-    panel.hidden = !selected;
-  });
-};
-
-document.querySelectorAll('[data-ribbon-tab]').forEach(tab => {
-  tab.addEventListener('click', () => setRibbonTab(tab.dataset.ribbonTab || 'home'));
-});
 
 document.getElementById('viewTextButton')?.addEventListener('click', () => vscode.postMessage({ type: 'openTextView' }));
 document.getElementById('undoButton')?.addEventListener('click', () => vscode.postMessage({ type: 'undo' }));
@@ -169,6 +135,10 @@ document.getElementById('toolbarValidate')?.addEventListener('click', () => {
 });
 document.getElementById('toolbarTheme')?.addEventListener('click', () => vscode.postMessage({ type: 'cycleTheme' }));
 document.getElementById('csvPanelClose')?.addEventListener('click', () => setPanelOpen(false));
+const commandOverflow = document.getElementById('commandOverflow');
+commandOverflow?.addEventListener('click', event => {
+  if (event.target.closest('button')) commandOverflow.open = false;
+});
 document.getElementById('ribbonCopy')?.addEventListener('click', () => copySelectionToClipboard());
 document.getElementById('ribbonZoomOut')?.addEventListener('click', () => zoomOut());
 document.getElementById('ribbonZoomReset')?.addEventListener('click', () => resetZoom());
@@ -212,6 +182,7 @@ document.getElementById('toolbarFilter')?.addEventListener('click', () => {
         if (visible) shown++;
       });
       document.getElementById('quickFilterCount').textContent = `${shown} visible rows`;
+      if (visibleStatus) visibleStatus.textContent = query ? `${shown} visible` : '';
       updateModernStatus();
     });
     input?.focus();
@@ -605,40 +576,6 @@ const handleZoomWheel = e => {
 window.addEventListener('wheel', handleZoomWheel, { passive: false });
 
 const hasHeader = document.querySelector('thead') !== null;
-const installWorksheetHeaders = () => {
-  if (!table || table.querySelector('.sheet-column-letters')) return;
-  const columnIndices = Array.from(table.querySelectorAll('[data-col]'))
-    .map(cell => Number.parseInt(cell.getAttribute('data-col') || '', 10))
-    .filter(col => Number.isInteger(col) && col >= 0);
-  const maxColumn = columnIndices.length ? Math.max(...columnIndices) : 0;
-  let head = table.tHead;
-  if (!head) {
-    head = document.createElement('thead');
-    table.insertBefore(head, table.tBodies[0] || table.firstChild);
-  }
-  const row = document.createElement('tr');
-  row.className = 'sheet-column-letters';
-  if (table.querySelector('[data-col="-1"]')) {
-    const corner = document.createElement('th');
-    corner.className = 'sheet-corner';
-    corner.tabIndex = 0;
-    corner.setAttribute('aria-label', 'Select all cells');
-    corner.title = 'Select all / すべて選択';
-    row.appendChild(corner);
-  }
-  for (let col = 0; col <= maxColumn; col++) {
-    const header = document.createElement('th');
-    header.className = 'sheet-column-header';
-    header.dataset.sheetCol = String(col);
-    header.tabIndex = 0;
-    header.scope = 'col';
-    header.textContent = toColumnLabel(col);
-    header.setAttribute('aria-label', `Column ${toColumnLabel(col)}`);
-    row.appendChild(header);
-  }
-  head.insertBefore(row, head.firstChild);
-};
-installWorksheetHeaders();
 const getCellCoords = cell => ({ row: parseInt(cell.getAttribute('data-row')), col: parseInt(cell.getAttribute('data-col')) });
 const clearSelection = () => { currentSelection.forEach(c => c.classList.remove('selected')); currentSelection = []; };
 const contextMenu = document.getElementById('contextMenu');

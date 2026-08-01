@@ -10,6 +10,6 @@ eslint.config.mjs
 REVIEW.md
 AGENTS.md
 vsc-extension-quickstart.md
-node_modules/.cache/**
+node_modules/**
+out/**
 *.vsix
-out/test/**

@@ -33,6 +33,11 @@ describe('Reorder behavior', () => {
     assert.deepStrictEqual(order, [0, 2, 4, 1, 3]);
   });
 
+  it('normalizes batch deletion indices so a duplicate cannot delete an adjacent item', () => {
+    const indices = CsvEditorProvider.__test.normalizeIndices([3, 3, -1, 99, 1], 5);
+    assert.deepStrictEqual(indices, [1, 3]);
+  });
+
   it('reorders rows by absolute row index', () => {
     const rows = [['r0'], ['r1'], ['r2'], ['r3'], ['r4']];
     const reordered = CsvEditorProvider.__test.reorderRows(rows, [1, 2], 4);

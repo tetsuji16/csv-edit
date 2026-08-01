@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.4 — 2026-08-01
+
+- Replaced the Excel-inspired title bar and ribbon with a compact VS Code-style
+  CSV command bar and overflow menu.
+- Reduced permanent interface chrome to 84 pixels and tightened the default
+  cell padding to maximize the visible data area.
+- Removed synthetic spreadsheet column letters and switched the default column
+  colors to the active VS Code theme foreground.
+- Avoided repeated DOM-wide row and column counting by passing document
+  dimensions as webview metadata.
+- Replaced the light and dark screenshots with the compact interface.
+- Preserved BOM and line-ending style across structural edits and fallback
+  serialization paths.
+- Normalized batch deletion indices to prevent duplicate or invalid indices
+  from deleting unintended adjacent rows or columns.
+- Reduced the packaged icon size without changing its appearance.
+- Bundled extension-host code with esbuild, removing dependency metadata from
+  the VSIX and substantially reducing its file count.
+
 ## 0.1.3 — 2026-08-01
 
 - Rebuilt the editor shell as a spreadsheet-style interface with Home, Data,
