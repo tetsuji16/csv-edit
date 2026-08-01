@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <!-- Transparent background; blue-violet foreground is legible on light and dark surfaces. -->
+  <g stroke="#635BFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="74" y="74" width="330" height="330" rx="30"/>
+    <path d="M184 74v330M294 74v330M74 184h330M74 294h330"/>
+    <path d="m322 424 17-72 103-103a25 25 0 0 1 36 0l10 10a25 25 0 0 1 0 36L385 398z"/>
+    <path d="m406 285 45 45"/>
+  </g>
+</svg>
