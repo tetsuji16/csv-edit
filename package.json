@@ -16,7 +16,7 @@
     "url": "https://github.com/sponsors/tetsuji16"
   },
   "license": "MIT",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "engines": {
     "vscode": "^1.130.0",
     "node": ">=20"
@@ -30,13 +30,13 @@
   "keywords": [
     "csv",
     "tsv",
-    "spreadsheet",
     "editor",
     "data",
-    "excel"
+    "delimited-text",
+    "large-files"
   ],
   "galleryBanner": {
-    "color": "#111827",
+    "color": "#1e1e1e",
     "theme": "dark"
   },
   "activationEvents": [
@@ -61,7 +61,7 @@
     "onCommand:csvEdit.openDataTools",
     "onCommand:csvEdit.validate"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
@@ -330,9 +330,10 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "vscode:prepublish": "npm run verify",
+    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js",
+    "vscode:prepublish": "npm run verify && npm run bundle",
     "lint": "eslint \"src/**/*.ts\"",
-    "package": "vsce package",
+    "package": "vsce package --no-dependencies",
     "test": "npm run compile && node scripts/run-tests.cjs",
     "verify": "npm run lint && npm test"
   },
@@ -348,6 +349,7 @@
     "@typescript-eslint/eslint-plugin": "^7.9.0",
     "@typescript-eslint/parser": "^7.9.0",
     "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.25.0",
     "eslint": "^8.57.0",
     "typescript": "^5.9.3",
     "vscode": "^1.1.37"

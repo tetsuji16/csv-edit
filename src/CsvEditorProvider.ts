@@ -455,6 +455,16 @@ class CsvEditorController {
     ).rows;
   }
 
+  /** Serialize structural edits while retaining the document's BOM and line ending. */
+  private serializeRows(rows: string[][], separator: string): string {
+    const snapshot = this.documentModel.read(
+      this.document.version,
+      this.document.getText(),
+      separator
+    );
+    return this.documentModel.serialize(rows, snapshot);
+  }
+
   private async previewDataTool(request: DataToolRequest): Promise<void> {
     const result = applyDataTool(this.parseCurrentRows(), request);
     await this.currentWebviewPanel?.webview.postMessage({
@@ -534,7 +544,7 @@ class CsvEditorController {
         );
       }
       if (newCsvText === undefined) {
-        newCsvText = Papa.unparse(nextData, { delimiter: separator });
+        newCsvText = this.serializeRows(nextData, separator);
       }
 
       if (newCsvText === oldText) {
@@ -613,7 +623,7 @@ class CsvEditorController {
 
       let newCsvText = CsvEditorProvider.applyFieldUpdatesPreservingFormat(oldText, separator, updates);
       if (newCsvText === undefined) {
-        newCsvText = Papa.unparse(data, { delimiter: separator });
+        newCsvText = this.serializeRows(data, separator);
       }
       if (newCsvText === oldText) {
         return;
@@ -827,7 +837,7 @@ class CsvEditorController {
         newCsvText = CsvEditorProvider.applyFieldUpdatesPreservingFormat(oldText, separator, pasteResult.updates);
       }
       if (newCsvText === undefined) {
-        newCsvText = Papa.unparse(data, { delimiter: separator });
+        newCsvText = this.serializeRows(data, separator);
       }
       if (newCsvText === oldText) {
         return;
@@ -1076,7 +1086,7 @@ class CsvEditorController {
       }
       row.splice(index, 0, '');
     }
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1104,7 +1114,7 @@ class CsvEditorController {
         row.splice(index, 0, '');
       }
     }
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1128,7 +1138,7 @@ class CsvEditorController {
         row.splice(index, 1);
       }
     }
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1148,7 +1158,8 @@ class CsvEditorController {
     const text = this.document.getText();
     const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
     const data = result.data as string[][];
-    const sorted = [...indices].sort((a,b)=>b-a);
+    const numColumns = data.reduce((max, row) => Math.max(max, row.length), 0);
+    const sorted = this.normalizeIndices(indices, numColumns).sort((a, b) => b - a);
     for (const idx of sorted) {
       for (const row of data) {
         if (idx < row.length) {
@@ -1156,7 +1167,7 @@ class CsvEditorController {
         }
       }
     }
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1235,7 +1246,7 @@ class CsvEditorController {
       return s.toLowerCase() === 'nan' ? '' : s;
     }));
 
-    const newCsv = Papa.unparse(sanitized, { delimiter: separator });
+    const newCsv = this.serializeRows(sanitized, separator);
 
     const fullRange = new vscode.Range(
       0, 0,
@@ -1264,7 +1275,7 @@ class CsvEditorController {
       while (data.length < index) {data.push(Array(numColumns).fill(''));}
     }
     data.splice(index, 0, newRow);
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1292,7 +1303,7 @@ class CsvEditorController {
       }
       data.splice(index, 0, newRow);
     }
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1314,7 +1325,7 @@ class CsvEditorController {
     if (index < data.length) {
       data.splice(index, 1);
     }
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1334,13 +1345,13 @@ class CsvEditorController {
     const text = this.document.getText();
     const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
     const data = result.data as string[][];
-    const sorted = [...indices].sort((a,b)=>b-a);
+    const sorted = this.normalizeIndices(indices, data.length).sort((a, b) => b - a);
     for (const idx of sorted) {
       if (idx < data.length) {
         data.splice(idx, 1);
       }
     }
-    const newText = Papa.unparse(data, { delimiter: separator });
+    const newText = this.serializeRows(data, separator);
     const fullRange = new vscode.Range(
       0, 0,
       this.document.lineCount,
@@ -1419,7 +1430,7 @@ class CsvEditorController {
         return next;
       });
 
-      const newText = Papa.unparse(reorderedData, { delimiter: separator });
+      const newText = this.serializeRows(reorderedData, separator);
       const fullRange = new vscode.Range(
         0, 0,
         this.document.lineCount,
@@ -1446,7 +1457,7 @@ class CsvEditorController {
       const { reordered, changed } = this.reorderByIndices(data, indices, beforeIndex);
       if (!changed) {return;}
 
-      const newText = Papa.unparse(reordered, { delimiter: separator });
+      const newText = this.serializeRows(reordered, separator);
       const fullRange = new vscode.Range(
         0, 0,
         this.document.lineCount,
@@ -2886,6 +2897,10 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
       const base = Array.from({ length: n }, (_, i) => i);
       const result = c.reorderByIndices(base, indices, beforeIndex);
       return result.reordered;
+    },
+    normalizeIndices(indices: unknown, maxExclusive: number): number[] {
+      const c: any = new (CsvEditorController as any)({} as any);
+      return c.normalizeIndices(indices, maxExclusive);
     },
     reorderRows(rows: string[][], indices: number[], beforeIndex: number): string[][] {
       const c: any = new (CsvEditorController as any)({} as any);
