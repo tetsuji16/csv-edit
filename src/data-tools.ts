@@ -19,6 +19,11 @@ export type DataToolResult = {
   samples: Array<{ row: number; col: number; before: string; after: string }>;
 };
 
+export type DataToolOptions = {
+  /** Rows that must not participate in duplicate detection (for example, a header row). */
+  duplicateExemptRows?: readonly number[];
+};
+
 export type ValidationIssue = {
   severity: 'error' | 'warning';
   code: 'ragged-row' | 'empty-header' | 'duplicate-header';
@@ -29,7 +34,11 @@ export type ValidationIssue = {
 
 const cloneRows = (rows: string[][]): string[][] => rows.map(row => row.map(value => String(value ?? '')));
 
-export function applyDataTool(source: string[][], request: DataToolRequest): DataToolResult {
+export function applyDataTool(
+  source: string[][],
+  request: DataToolRequest,
+  options: DataToolOptions = {}
+): DataToolResult {
   let rows = cloneRows(source);
   let changedCells = 0;
   let removedRows = 0;
@@ -45,8 +54,9 @@ export function applyDataTool(source: string[][], request: DataToolRequest): Dat
 
   if (request.action === 'removeDuplicates') {
     const seen = new Set<string>();
+    const exemptRows = new Set(options.duplicateExemptRows ?? []);
     rows = rows.filter((row, index) => {
-      if (index === 0) {return true;}
+      if (exemptRows.has(index)) {return true;}
       const key = JSON.stringify(row);
       if (seen.has(key)) {
         removedRows++;

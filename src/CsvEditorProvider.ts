@@ -1,7 +1,7 @@
 import Papa from 'papaparse';
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { applyDataTool, DataToolRequest, validateCsvRows } from './data-tools';
+import { applyDataTool, DataToolOptions, DataToolRequest, validateCsvRows } from './data-tools';
 import { CsvDocumentModel } from './csv-document-model';
 import { parseWebviewMessage } from './webview-protocol';
 
@@ -72,6 +72,7 @@ class CsvEditorController {
   private separatorCache: { version: number; configKey: string; separator: string } | undefined;
   private isDiffContext = false;
   private chunkRenderState: ChunkRenderState | undefined;
+  private documentMutationQueue: Promise<void> = Promise.resolve();
   private readonly documentModel = new CsvDocumentModel();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -138,13 +139,13 @@ class CsvEditorController {
       }
       switch (e.type) {
         case 'editCell':
-          this.updateDocument(e.row, e.col, e.value);
+          await this.enqueueDocumentMutation(() => this.updateDocument(e.row, e.col, e.value));
           break;
         case 'replaceCells':
-          await this.replaceCells(e.replacements);
+          await this.enqueueDocumentMutation(() => this.replaceCells(e.replacements));
           break;
         case 'pasteCells':
-          await this.pasteCells(e.text, e.anchorRow, e.anchorCol, e.selection);
+          await this.enqueueDocumentMutation(() => this.pasteCells(e.text, e.anchorRow, e.anchorCol, e.selection));
           break;
         case 'requestChunk':
           await this.requestChunk(e.start, e.requestId);
@@ -153,44 +154,44 @@ class CsvEditorController {
           await this.findMatches(e.requestId, e.query, e.options);
           break;
         case 'save':
-          await this.handleSave();
+          await this.enqueueDocumentMutation(() => this.handleSave());
           break;
         case 'copyToClipboard':
           await vscode.env.clipboard.writeText(e.text);
           console.log('CSV: Copied to clipboard');
           break;
         case 'insertColumn':
-          await this.insertColumn(e.index);
+          await this.enqueueDocumentMutation(() => this.insertColumn(e.index));
           break;
         case 'insertColumns':
-          await this.insertColumns(e.index, e.count);
+          await this.enqueueDocumentMutation(() => this.insertColumns(e.index, e.count));
           break;
         case 'deleteColumn':
-          await this.deleteColumn(e.index);
+          await this.enqueueDocumentMutation(() => this.deleteColumn(e.index));
           break;
         case 'deleteColumns':
-          await this.deleteColumns(e.indices);
+          await this.enqueueDocumentMutation(() => this.deleteColumns(e.indices));
           break;
         case 'insertRow':
-          await this.insertRow(e.index);
+          await this.enqueueDocumentMutation(() => this.insertRow(e.index));
           break;
         case 'insertRows':
-          await this.insertRows(e.index, e.count);
+          await this.enqueueDocumentMutation(() => this.insertRows(e.index, e.count));
           break;
         case 'deleteRow':
-          await this.deleteRow(e.index);
+          await this.enqueueDocumentMutation(() => this.deleteRow(e.index));
           break;
         case 'deleteRows':
-          await this.deleteRows(e.indices);
+          await this.enqueueDocumentMutation(() => this.deleteRows(e.indices));
           break;
         case 'reorderColumns':
-          await this.reorderColumns(e.indices, e.beforeIndex);
+          await this.enqueueDocumentMutation(() => this.reorderColumns(e.indices, e.beforeIndex));
           break;
         case 'reorderRows':
-          await this.reorderRows(e.indices, e.beforeIndex);
+          await this.enqueueDocumentMutation(() => this.reorderRows(e.indices, e.beforeIndex));
           break;
         case 'sortColumn':
-          await this.sortColumn(e.index, e.ascending);
+          await this.enqueueDocumentMutation(() => this.sortColumn(e.index, e.ascending));
           break;
         case 'openLink':
           await this.openLinkExternally(e.url);
@@ -199,7 +200,7 @@ class CsvEditorController {
           await this.previewDataTool(e.request);
           break;
         case 'applyDataTool':
-          await this.applyDataTool(e.request);
+          await this.enqueueDocumentMutation(() => this.applyDataTool(e.request));
           break;
         case 'validateData':
           await this.validateData();
@@ -216,10 +217,14 @@ class CsvEditorController {
           });
           break;
         case 'undo':
-          await vscode.commands.executeCommand('undo');
+          await this.enqueueDocumentMutation(async () => {
+            await vscode.commands.executeCommand('undo');
+          });
           break;
         case 'redo':
-          await vscode.commands.executeCommand('redo');
+          await this.enqueueDocumentMutation(async () => {
+            await vscode.commands.executeCommand('redo');
+          });
           break;
         case 'cycleTheme': {
           const cfg = vscode.workspace.getConfiguration('csvEdit');
@@ -455,6 +460,28 @@ class CsvEditorController {
     ).rows;
   }
 
+  private enqueueDocumentMutation(operation: () => Promise<void>): Promise<void> {
+    const queued = this.documentMutationQueue.then(operation);
+    this.documentMutationQueue = queued
+      .catch(error => {
+        console.error('CSV Edit: document mutation failed', error);
+      })
+      .finally(() => {
+        // Several structural-edit paths touch this guard. Reset it centrally so
+        // a rejected VS Code edit cannot permanently suppress document refreshes.
+        this.isUpdatingDocument = false;
+      });
+    return this.documentMutationQueue;
+  }
+
+  private getDataToolOptions(rows: string[][]): DataToolOptions {
+    const hiddenRows = Math.min(Math.max(0, this.getHiddenRows()), rows.length);
+    const protectedRowCount = hiddenRows + (this.getEffectiveHeader(rows, hiddenRows) ? 1 : 0);
+    return protectedRowCount > 0
+      ? { duplicateExemptRows: Array.from({ length: protectedRowCount }, (_, index) => index) }
+      : {};
+  }
+
   /** Serialize structural edits while retaining the document's BOM and line ending. */
   private serializeRows(rows: string[][], separator: string): string {
     const snapshot = this.documentModel.read(
@@ -466,7 +493,9 @@ class CsvEditorController {
   }
 
   private async previewDataTool(request: DataToolRequest): Promise<void> {
-    const result = applyDataTool(this.parseCurrentRows(), request);
+    await this.documentMutationQueue;
+    const rows = this.parseCurrentRows();
+    const result = applyDataTool(rows, request, this.getDataToolOptions(rows));
     await this.currentWebviewPanel?.webview.postMessage({
       type: 'dataToolPreview',
       request,
@@ -477,7 +506,8 @@ class CsvEditorController {
   }
 
   private async applyDataTool(request: DataToolRequest): Promise<void> {
-    const result = applyDataTool(this.parseCurrentRows(), request);
+    const rows = this.parseCurrentRows();
+    const result = applyDataTool(rows, request, this.getDataToolOptions(rows));
     if (!result.changedCells && !result.removedRows) {return;}
     const snapshot = this.documentModel.read(
       this.document.version,
@@ -1228,7 +1258,12 @@ class CsvEditorController {
     };
 
     body.sort((r1, r2) => {
-      const diff = cmp(r1[index] ?? '', r2[index] ?? '');
+      const left = r1[index] ?? '';
+      const right = r2[index] ?? '';
+      const diff = cmp(left, right);
+      // Empty cells stay at the bottom in both directions. Reversing the whole
+      // comparator would unexpectedly move them to the top for descending sort.
+      if (left.trim() === '' || right.trim() === '') {return diff;}
       return ascending ? diff : -diff;
     });
 
@@ -2872,7 +2907,10 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
         return sa.localeCompare(sb, undefined, { sensitivity: 'base' });
       };
       body.sort((r1, r2) => {
-        const diff = cmp(r1[index] ?? '', r2[index] ?? '');
+        const left = r1[index] ?? '';
+        const right = r2[index] ?? '';
+        const diff = cmp(left, right);
+        if (left.trim() === '' || right.trim() === '') {return diff;}
         return ascending ? diff : -diff;
       });
       const prefix = trimmed.slice(0, offset);
