@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.11 — 2026-08-02
+
+- Kept the GitHub and Marketplace introduction consistently in English.
+
 ## 0.1.10 — 2026-08-02
 
 - Refreshed the GitHub and Marketplace introduction with clearer English and

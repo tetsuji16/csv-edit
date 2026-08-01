@@ -9,9 +9,6 @@ that feels native to Visual Studio Code. The source stays plain text, so Save,
 Auto Save, Git diffs, and VS Code undo history keep working as expected. Parsing,
 editing, search, and data tools all run locally on your machine.
 
-> CSV Editは、CSV・TSV・TAB・PSVを高速なグリッドで編集できる、
-> ローカル完結型のVS Code拡張機能です。テキスト形式やGitの差分をそのまま保てます。
-
 ## Why CSV Edit
 
 - **Stay in VS Code** — inspect and edit delimited files without switching apps
