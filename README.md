@@ -1,6 +1,6 @@
 # CSV Edit
 
-Edit delimited text as a spreadsheet without leaving Visual Studio Code.
+Edit delimited text in a focused grid without leaving Visual Studio Code.
 
 CSV Edit opens CSV, TSV, TAB, and PSV files in a compact grid by default. The
 underlying document stays plain text, so normal saving, source control, diffs,
@@ -9,13 +9,13 @@ and VS Code undo history continue to work. Processing is local-only.
 > CSV Editは、区切り形式のテキストをVS Code上で表として編集するための
 > ローカル完結型エディターです。
 
-![CSV Edit spreadsheet interface](https://raw.githubusercontent.com/tetsuji16/csv-edit/main/images/screenshot-light.png)
+![CSV Edit compact grid interface](https://raw.githubusercontent.com/tetsuji16/csv-edit/main/images/screenshot-light.png)
 
-The interface follows a familiar spreadsheet layout: a compact ribbon groups
-editing and data commands, the name box identifies the active cell, and the
-formula bar edits its complete value—including multiline text. Excel-style
-column letters, row numbers, selection borders, and a worksheet status bar keep
-large tables easy to navigate.
+The interface follows VS Code's visual language and keeps the document area
+focused on CSV data. A single compact command bar exposes common actions, the
+selected-cell bar edits complete values—including multiline text—and infrequent
+commands stay in an overflow menu. Dense rows, restrained borders, and a small
+status bar leave more room for large tables.
 
 ## An independent rewrite
 
@@ -32,8 +32,8 @@ screenshots, and Marketplace artwork are not reused.
 
 - Opens `.csv`, `.tsv`, `.tab`, and `.psv` files directly in a grid
 - Edits cells, ranges, rows, and columns with keyboard or mouse
-- Provides a spreadsheet ribbon, name box, and editable formula bar
-- Shows familiar column letters, row numbers, and active-cell borders
+- Provides a compact command bar and editable selected-cell value bar
+- Uses VS Code theme colors, dense rows, row numbers, and clear selection borders
 - Copies and pastes tabular data in an Excel-compatible format
 - Inserts, removes, resizes, and reorders rows and columns
 - Sorts columns, filters visible rows, and searches or replaces values
@@ -45,7 +45,7 @@ screenshots, and Marketplace artwork are not reused.
 
 ## Grid or text—your choice
 
-Select **Text** in the grid, use the editor-title action, or run
+Select **Open as text** from the grid's **…** menu, use the editor-title action, or run
 **CSV Edit: Toggle Grid/Text View**. CSV Edit remembers the last selection
 globally and uses it when the next supported file opens.
 

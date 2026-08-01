@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the Excel-inspired title bar and ribbon with a compact VS Code-style
+  CSV command bar and overflow menu.
+- Reduced permanent interface chrome to 84 pixels and tightened the default
+  cell padding to maximize the visible data area.
+- Removed synthetic spreadsheet column letters and switched the default column
+  colors to the active VS Code theme foreground.
+- Avoided repeated DOM-wide row and column counting by passing document
+  dimensions as webview metadata.
+- Replaced the light and dark screenshots with the compact interface.
+
 ## 0.1.3 — 2026-08-01
 
 - Rebuilt the editor shell as a spreadsheet-style interface with Home, Data,

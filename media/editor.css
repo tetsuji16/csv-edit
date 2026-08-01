@@ -1,15 +1,11 @@
 :root {
-  --sheet-titlebar: #217346;
-  --sheet-titlebar-hover: rgba(255, 255, 255, 0.14);
-  --sheet-accent: #107c41;
-  --sheet-accent-soft: rgba(16, 124, 65, 0.12);
-  --sheet-ribbon: var(--csv-surface);
-  --sheet-header: color-mix(in srgb, var(--csv-surface) 88%, var(--csv-bg));
-  --sheet-cell: var(--csv-bg);
-  --sheet-grid: color-mix(in srgb, var(--csv-border) 82%, transparent);
-  --sheet-hover: color-mix(in srgb, var(--csv-accent) 9%, var(--csv-bg));
-  --sheet-control: color-mix(in srgb, var(--csv-bg) 72%, var(--csv-surface));
-  --sheet-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  --csv-hover: var(--vscode-toolbar-hoverBackground, color-mix(in srgb, var(--csv-text) 8%, transparent));
+  --csv-active: var(--vscode-toolbar-activeBackground, color-mix(in srgb, var(--csv-text) 12%, transparent));
+  --csv-control: var(--vscode-input-background, var(--csv-bg));
+  --csv-control-border: var(--vscode-input-border, var(--csv-border));
+  --csv-grid: var(--vscode-editorWidget-border, var(--csv-border));
+  --csv-header: var(--vscode-editorGroupHeader-tabsBackground, var(--csv-surface));
+  --csv-selection: var(--vscode-editor-selectionBackground, color-mix(in srgb, var(--csv-accent) 24%, transparent));
 }
 
 * { box-sizing: border-box; }
@@ -19,349 +15,227 @@ body {
   color: var(--csv-text);
 }
 
-.csv-app-shell {
+.csv-workbench {
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-rows: 36px 31px 76px 38px minmax(0, 1fr) 27px;
+  grid-template-rows: 32px 30px minmax(0, 1fr) 22px;
   overflow: hidden;
 }
 
-.sheet-titlebar {
+.csv-commandbar {
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 0 12px;
-  color: #fff;
-  background: var(--sheet-titlebar);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.18);
-}
-
-.sheet-app-mark {
-  width: 22px;
-  height: 22px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 2px;
-  flex: 0 0 auto;
-  padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: 3px;
-}
-
-.sheet-app-mark span { background: rgba(255, 255, 255, 0.88); }
-.sheet-app-mark span:nth-child(2),
-.sheet-app-mark span:nth-child(5),
-.sheet-app-mark span:nth-child(8) { opacity: 0.58; }
-
-.sheet-product-name { font-weight: 650; letter-spacing: 0.01em; }
-.sheet-document-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.9em;
-}
-.sheet-title-spacer { flex: 1; }
-.sheet-save-state { color: rgba(255, 255, 255, 0.78); font-size: 0.82em; }
-
-.titlebar-action {
-  min-width: 32px;
-  height: 28px;
-  border: 0;
-  border-radius: 4px;
-  padding: 0 9px;
-  background: transparent;
-  color: #fff;
-  font: inherit;
-  cursor: pointer;
-}
-.titlebar-action:hover,
-.titlebar-action:focus-visible { background: var(--sheet-titlebar-hover); outline: none; }
-
-.ribbon-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-  padding: 0 8px;
-  background: var(--sheet-ribbon);
+  gap: 8px;
+  padding: 2px 6px;
+  background: var(--csv-surface);
   border-bottom: 1px solid var(--csv-border);
 }
 
-.ribbon-tab {
-  position: relative;
-  min-width: 62px;
-  border: 0;
-  padding: 0 12px;
-  background: transparent;
-  color: var(--csv-text);
-  font: inherit;
-  cursor: pointer;
-}
-.ribbon-tab:hover { background: var(--sheet-hover); }
-.ribbon-tab[aria-selected="true"] { color: var(--sheet-accent); font-weight: 600; }
-.ribbon-tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: -1px;
-  height: 3px;
-  background: var(--sheet-accent);
-}
-
-.ribbon-host {
-  position: relative;
+.command-primary {
   min-width: 0;
-  background: var(--sheet-ribbon);
-  border-bottom: 1px solid var(--csv-border);
-  box-shadow: var(--sheet-shadow);
-  z-index: 30;
-}
-
-.ribbon-panel {
-  height: 100%;
-  display: none;
-  align-items: stretch;
-  gap: 0;
-  padding: 6px 8px 5px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-.ribbon-panel.active { display: flex; }
-.ribbon-group {
   display: flex;
-  align-items: stretch;
-  gap: 3px;
-  padding: 0 9px 14px;
-  border-right: 1px solid var(--csv-border);
-  position: relative;
-}
-.ribbon-group:first-child { padding-left: 0; }
-.ribbon-group:last-child { border-right: 0; }
-.ribbon-group-label {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  color: var(--csv-muted);
-  text-align: center;
-  font-size: 0.72em;
-  line-height: 12px;
-  white-space: nowrap;
+  align-items: center;
+  gap: 2px;
 }
 
-.ribbon-button {
-  min-width: 48px;
-  height: 50px;
+.command-button,
+.command-overflow > summary {
+  height: 26px;
+  min-width: 26px;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
+  padding: 0 7px;
   border: 1px solid transparent;
-  border-radius: 4px;
-  padding: 3px 7px;
+  border-radius: 2px;
   background: transparent;
   color: var(--csv-text);
   font: inherit;
-  font-size: 0.82em;
-  cursor: pointer;
   white-space: nowrap;
+  cursor: pointer;
 }
-.ribbon-button:hover,
-.ribbon-button:focus-visible {
-  border-color: color-mix(in srgb, var(--sheet-accent) 36%, transparent);
-  background: var(--sheet-accent-soft);
+
+.command-button:hover,
+.command-button:focus-visible,
+.command-overflow > summary:hover,
+.command-overflow > summary:focus-visible,
+.command-overflow[open] > summary {
+  background: var(--csv-hover);
   outline: none;
 }
-.ribbon-button:active { transform: translateY(1px); }
-.ribbon-icon { min-height: 21px; font-size: 18px; line-height: 21px; font-weight: 500; }
-.ribbon-button.compact { min-width: 40px; }
-.ribbon-button.accent .ribbon-icon { color: var(--sheet-accent); }
 
-.formula-bar {
+.command-button:active { background: var(--csv-active); }
+.command-button.icon-only { width: 26px; padding: 0; font-size: 16px; }
+.command-separator { width: 1px; height: 18px; margin: 0 3px; background: var(--csv-border); }
+.document-context {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--csv-muted);
+  font-size: 0.86em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-overflow { position: relative; }
+.command-overflow > summary { width: 30px; padding: 0; font-size: 18px; list-style: none; }
+.command-overflow > summary::-webkit-details-marker { display: none; }
+.command-menu {
+  position: absolute;
+  top: 29px;
+  left: 0;
+  z-index: 1000;
+  width: 210px;
+  padding: 4px;
+  border: 1px solid var(--vscode-menu-border, var(--csv-border));
+  border-radius: 3px;
+  background: var(--vscode-menu-background, var(--csv-surface));
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28));
+}
+.command-menu button {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--vscode-menu-foreground, var(--csv-text));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.command-menu button:hover,
+.command-menu button:focus-visible {
+  background: var(--vscode-menu-selectionBackground, var(--csv-hover));
+  color: var(--vscode-menu-selectionForeground, var(--csv-text));
+  outline: none;
+}
+.menu-separator { display: block; height: 1px; margin: 4px; background: var(--vscode-menu-separatorBackground, var(--csv-border)); }
+
+.cell-bar {
   min-width: 0;
   display: grid;
-  grid-template-columns: 82px 34px minmax(0, 1fr) 30px 30px;
+  grid-template-columns: 72px minmax(0, 1fr) 26px 26px;
   align-items: stretch;
-  gap: 0;
-  padding: 4px 8px;
-  background: var(--sheet-ribbon);
+  padding: 2px 6px;
+  background: var(--csv-bg);
   border-bottom: 1px solid var(--csv-border);
-  z-index: 20;
 }
-.formula-name-box,
-.formula-input {
+
+.cell-address,
+.cell-input {
   min-width: 0;
-  border: 1px solid var(--csv-border);
-  background: var(--sheet-control);
+  border: 1px solid var(--csv-control-border);
+  background: var(--csv-control);
   color: var(--csv-text);
   font: inherit;
 }
-.formula-name-box {
-  padding: 0 8px;
-  text-align: center;
-  border-radius: 3px 0 0 3px;
-}
-.formula-fx {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-top: 1px solid var(--csv-border);
-  border-bottom: 1px solid var(--csv-border);
+.cell-address {
+  padding: 0 6px;
+  border-radius: 2px 0 0 2px;
   color: var(--csv-muted);
-  font-family: Georgia, serif;
-  font-style: italic;
-  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.formula-input {
+.cell-input {
   resize: none;
   overflow: hidden;
-  padding: 4px 8px;
-  border-radius: 0;
+  padding: 2px 7px;
+  border-left: 0;
   line-height: 20px;
   user-select: text;
 }
-.formula-name-box:focus,
-.formula-input:focus { outline: 2px solid color-mix(in srgb, var(--sheet-accent) 48%, transparent); outline-offset: -2px; }
-.formula-action {
-  border: 1px solid var(--csv-border);
+.cell-address:focus,
+.cell-input:focus { outline: 1px solid var(--csv-accent); outline-offset: -1px; }
+.cell-input::placeholder { color: var(--vscode-input-placeholderForeground, var(--csv-muted)); }
+.cell-action {
+  border: 1px solid var(--csv-control-border);
   border-left: 0;
-  background: var(--sheet-control);
+  background: var(--csv-control);
   color: var(--csv-muted);
   font: inherit;
   cursor: pointer;
 }
-.formula-action:hover { background: var(--sheet-hover); color: var(--sheet-accent); }
-.formula-apply { border-radius: 0 3px 3px 0; }
+.cell-action:last-child { border-radius: 0 2px 2px 0; }
+.cell-action:hover,
+.cell-action:focus-visible { background: var(--csv-hover); color: var(--csv-text); outline: none; }
 
 .table-container {
   width: 100%;
   height: auto !important;
   min-height: 0;
   overflow: auto;
-  background: var(--sheet-cell);
-  scrollbar-color: color-mix(in srgb, var(--csv-muted) 55%, transparent) var(--csv-surface);
+  background: var(--csv-bg);
+  scrollbar-color: var(--vscode-scrollbarSlider-background, var(--csv-muted)) transparent;
 }
 
 .table-container table {
-  border-collapse: separate;
-  border-spacing: 0;
   min-width: 100%;
   width: max-content;
-  background: var(--sheet-cell);
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--csv-bg);
 }
 
 .table-container th,
 .table-container td {
-  height: 25px;
-  min-height: 25px;
+  height: 22px;
+  min-height: 22px;
+  padding: 2px 7px !important;
   border: 0 !important;
-  border-right: 1px solid var(--sheet-grid) !important;
-  border-bottom: 1px solid var(--sheet-grid) !important;
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
-  background: var(--sheet-cell);
+  border-right: 1px solid var(--csv-grid) !important;
+  border-bottom: 1px solid var(--csv-grid) !important;
+  background: var(--csv-bg) !important;
+  color: var(--csv-text) !important;
+  line-height: 17px;
 }
-.table-container td:hover { background: var(--sheet-hover); }
+.table-container td:hover { background: var(--csv-hover) !important; }
 .table-container td:focus,
 .table-container th:focus { outline: none; }
 
 .table-container thead { position: relative; z-index: 18; }
-.table-container .sheet-column-letters th {
+.table-container thead th {
   position: sticky;
   top: 0;
-  z-index: 22;
-  height: 26px;
-  min-height: 26px;
-  padding: 2px 8px !important;
-  background: var(--sheet-header) !important;
-  color: var(--csv-muted) !important;
-  text-align: center;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: default;
-  user-select: none;
-}
-.table-container .sheet-column-letters th:hover { background: var(--sheet-accent-soft) !important; color: var(--sheet-accent) !important; }
-.table-container .sheet-column-letters .sheet-corner {
-  left: 0;
-  min-width: 42px !important;
-  width: 42px !important;
-  max-width: 42px !important;
-  z-index: 26;
-  cursor: pointer;
-}
-.sheet-corner::after {
-  content: "";
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-top: 6px solid transparent;
-  border-right: 6px solid var(--csv-muted);
-}
-
-.table-container thead tr:not(.sheet-column-letters) th {
-  position: sticky;
-  top: 26px;
   z-index: 19;
-  background: color-mix(in srgb, var(--sheet-accent) 8%, var(--sheet-cell)) !important;
-  color: var(--csv-text);
+  background: var(--csv-header) !important;
+  color: var(--vscode-editorGroupHeader-tabsForeground, var(--csv-text)) !important;
   font-weight: 600;
 }
 
 .table-container td[data-col="-1"],
-.table-container th:not([data-col]):not(.sheet-column-header) {
+.table-container thead th:first-child:not([data-col]) {
   position: sticky;
   left: 0;
   z-index: 16;
-  min-width: 42px !important;
-  width: 42px !important;
-  max-width: 42px !important;
-  padding-left: 4px !important;
-  padding-right: 4px !important;
-  background: var(--sheet-header) !important;
+  min-width: 38px !important;
+  width: 38px !important;
+  max-width: 38px !important;
+  padding-right: 5px !important;
+  padding-left: 3px !important;
+  background: var(--csv-header) !important;
   color: var(--csv-muted) !important;
-  text-align: center;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.table-container thead tr:not(.sheet-column-letters) th:first-child { z-index: 24; }
+.table-container thead th:first-child:not([data-col]) { z-index: 24; }
 
 .table-container td.selected,
-.table-container th.selected {
-  background: var(--sheet-accent-soft) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sheet-accent) 36%, transparent);
-}
+.table-container th.selected { background: var(--csv-selection) !important; }
 .table-container td.active-cell,
 .table-container th.active-cell {
   position: relative;
   z-index: 12;
-  background: color-mix(in srgb, var(--sheet-accent) 5%, var(--sheet-cell)) !important;
-  box-shadow: inset 0 0 0 2px var(--sheet-accent) !important;
-}
-.table-container td.active-cell::after,
-.table-container th.active-cell::after {
-  content: "";
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 6px;
-  height: 6px;
-  background: var(--sheet-accent);
-  border: 1px solid var(--sheet-cell);
+  box-shadow: inset 0 0 0 1px var(--csv-accent) !important;
 }
 .table-container td.editing,
 .table-container th.editing {
   z-index: 25;
-  box-shadow: inset 0 0 0 2px var(--sheet-accent) !important;
-  background: var(--sheet-cell) !important;
+  background: var(--csv-bg) !important;
+  box-shadow: inset 0 0 0 1px var(--csv-accent) !important;
 }
 
 .csv-status {
@@ -369,54 +243,78 @@ body {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0 !important;
-  padding: 0 8px !important;
-  background: var(--sheet-titlebar) !important;
-  color: rgba(255, 255, 255, 0.9) !important;
+  padding: 0 7px !important;
   border: 0 !important;
+  border-top: 1px solid var(--csv-border) !important;
+  background: var(--vscode-statusBar-background, var(--csv-surface)) !important;
+  color: var(--vscode-statusBar-foreground, var(--csv-muted)) !important;
   font-size: 0.78em !important;
 }
-.csv-status span { padding: 0 10px; border-right: 1px solid rgba(255, 255, 255, 0.2); white-space: nowrap; }
+.csv-status span { padding: 0 7px; border-right: 1px solid color-mix(in srgb, currentColor 20%, transparent); white-space: nowrap; }
 .csv-status span:empty { display: none; }
-.csv-status span:first-child { padding-left: 2px; }
+.csv-status span:first-child { padding-left: 0; }
 .csv-status .status-spacer { flex: 1; border-right: 0; }
 
 .csv-panel {
-  top: 181px !important;
-  bottom: 27px !important;
-  width: min(380px, 92vw) !important;
+  top: 32px !important;
+  bottom: 22px !important;
+  width: min(340px, 92vw) !important;
   padding: 0 !important;
-  background: var(--sheet-ribbon) !important;
-  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.2) !important;
+  border-left: 1px solid var(--csv-border) !important;
+  background: var(--vscode-sideBar-background, var(--csv-surface)) !important;
+  box-shadow: -4px 0 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.2)) !important;
 }
 .panel-heading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 6px;
+  min-height: 34px;
+  padding: 3px 8px 3px 12px;
   border-bottom: 1px solid var(--csv-border);
 }
-.csv-panel h2 { flex: 1; margin: 0 !important; font-size: 1em !important; }
-.panel-close {
-  width: 28px;
-  height: 28px;
-  border: 0 !important;
-  background: transparent !important;
-  font-size: 17px;
-}
+.csv-panel h2 { flex: 1; margin: 0 !important; font-size: 0.92em !important; text-transform: uppercase; }
+.panel-close { width: 26px; height: 26px; min-height: 26px !important; border: 0 !important; background: transparent !important; font-size: 16px; }
 .csv-panel .panel-actions,
-#panelResults { margin: 14px; }
-.csv-panel button { border-radius: 3px !important; }
+#panelResults { margin: 10px; }
+.csv-panel .panel-actions { grid-template-columns: 1fr !important; gap: 4px !important; }
+.csv-panel button { min-height: 28px !important; border-radius: 2px !important; }
 
-#findReplaceWidget { top: 151px !important; }
+#findReplaceWidget {
+  top: 36px !important;
+  right: 12px !important;
+  width: min(540px, calc(100vw - 24px)) !important;
+  min-width: 0 !important;
+  max-width: 540px !important;
+  padding: 6px !important;
+  border: 1px solid var(--vscode-widget-border, var(--csv-border)) !important;
+  border-radius: 3px !important;
+  background: var(--vscode-editorWidget-background, var(--csv-surface)) !important;
+  color: var(--vscode-editorWidget-foreground, var(--csv-text)) !important;
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28)) !important;
+}
+#findReplaceWidget .fr-gutter,
+#findReplaceWidget .fr-overflow-menu { background: var(--vscode-editorWidget-background, var(--csv-surface)) !important; border-color: var(--csv-border) !important; }
+#findReplaceWidget .fr-input { background: var(--vscode-input-background, var(--csv-bg)) !important; color: var(--vscode-input-foreground, var(--csv-text)) !important; border-color: var(--vscode-input-border, var(--csv-border)) !important; }
+#findReplaceWidget .fr-icon-btn,
+#findReplaceWidget .fr-action-btn,
+#findReplaceWidget .fr-caret-btn,
+#findReplaceWidget .fr-overflow-item { color: var(--csv-text) !important; }
 
-@media (max-width: 720px) {
-  .csv-app-shell { grid-template-rows: 36px 31px 69px 38px minmax(0, 1fr) 27px; }
-  .ribbon-panel { padding-left: 5px; padding-right: 5px; }
-  .ribbon-group { padding-left: 4px; padding-right: 4px; }
-  .ribbon-button { min-width: 42px; padding-left: 4px; padding-right: 4px; }
-  .ribbon-button .ribbon-label { font-size: 0.9em; }
-  .sheet-save-state, .sheet-document-title { display: none; }
-  .csv-panel { top: 174px !important; }
-  #findReplaceWidget { top: 144px !important; right: 8px !important; width: calc(100vw - 16px) !important; min-width: 0 !important; max-width: none !important; }
+#contextMenu {
+  border-color: var(--vscode-menu-border, var(--csv-border)) !important;
+  background: var(--vscode-menu-background, var(--csv-surface)) !important;
+  color: var(--vscode-menu-foreground, var(--csv-text)) !important;
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28));
+}
+#contextMenu div { padding: 4px 12px !important; }
+#contextMenu div:hover { background: var(--vscode-menu-selectionBackground, var(--csv-hover)) !important; color: var(--vscode-menu-selectionForeground, var(--csv-text)) !important; }
+
+@media (max-width: 640px) {
+  .document-context { display: none; }
+  .command-button { width: 28px; padding: 0; overflow: hidden; font-size: 0; }
+  .command-button span { font-size: 15px; }
+  .command-button.icon-only { font-size: 16px; }
+  .command-separator { margin: 0 1px; }
+  .cell-bar { grid-template-columns: 64px minmax(0, 1fr) 26px 26px; }
+  .csv-status #visibleStatus { display: none; }
 }

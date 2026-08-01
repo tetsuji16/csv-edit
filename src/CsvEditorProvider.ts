@@ -1494,11 +1494,12 @@ class CsvEditorController {
       vscode.workspace.getConfiguration('editor').get<number>('fontSize', 14)
     );
 
-    const cellPadding = config.get<number>('cellPadding', 4);
+    const cellPadding = config.get<number>('cellPadding', 2);
     const data = this.trimTrailingEmptyRows((parsed.data || []) as string[][]);
+    const columnCount = data.reduce((max, row) => Math.max(max, row.length), 0);
     const treatHeader = this.getEffectiveHeader(data, hiddenRows);
     const clickableLinks = config.get<boolean>('clickableLinks', true);
-    const configuredColumnColorMode = config.get<string>('columnColorMode', 'type');
+    const configuredColumnColorMode = config.get<string>('columnColorMode', 'theme');
     const diffUseThemeForeground = config.get<boolean>('diffUseThemeForeground', true);
     const columnColorMode = CsvEditorController.resolveEffectiveColumnColorMode(
       configuredColumnColorMode,
@@ -1539,7 +1540,9 @@ class CsvEditorController {
       nextChunkStart,
       hasRemoteChunks,
       mouseWheelZoomEnabled,
-      mouseWheelZoomInvert
+      mouseWheelZoomInvert,
+      rowCount: data.length,
+      columnCount
     });
   }
 
@@ -1799,8 +1802,10 @@ class CsvEditorController {
     hasRemoteChunks: boolean;
     mouseWheelZoomEnabled: boolean;
     mouseWheelZoomInvert: boolean;
+    rowCount: number;
+    columnCount: number;
   }): string {
-    const { webview, nonce, fontFamily, fontSize, cellPadding, separator, tableHtml, chunksJson, extraColumnColorCss, nextChunkStart, hasRemoteChunks, mouseWheelZoomEnabled, mouseWheelZoomInvert } = args;
+    const { webview, nonce, fontFamily, fontSize, cellPadding, separator, tableHtml, chunksJson, extraColumnColorCss, nextChunkStart, hasRemoteChunks, mouseWheelZoomEnabled, mouseWheelZoomInvert, rowCount, columnCount } = args;
     const themePreference = vscode.workspace.getConfiguration('csvEdit').get<'auto' | 'light' | 'dark'>('theme', 'auto');
     const isDark = themePreference === 'dark' || (
       themePreference === 'auto' &&
@@ -1830,12 +1835,12 @@ class CsvEditorController {
     <style nonce="${nonce}">
       :root {
         color-scheme: ${isDark ? 'dark' : 'light'};
-        --csv-bg: ${isDark ? '#111318' : '#ffffff'};
-        --csv-surface: ${isDark ? '#191c22' : '#f7f8fa'};
-        --csv-border: ${isDark ? '#30343c' : '#dfe3e8'};
-        --csv-text: ${isDark ? '#e7eaf0' : '#1f2937'};
-        --csv-muted: ${isDark ? '#9ca3af' : '#667085'};
-        --csv-accent: #4f8cff;
+        --csv-bg: var(--vscode-editor-background, ${isDark ? '#1e1e1e' : '#ffffff'});
+        --csv-surface: var(--vscode-editorGroupHeader-tabsBackground, ${isDark ? '#181818' : '#f3f3f3'});
+        --csv-border: var(--vscode-panel-border, ${isDark ? '#3c3c3c' : '#d4d4d4'});
+        --csv-text: var(--vscode-editor-foreground, ${isDark ? '#d4d4d4' : '#333333'});
+        --csv-muted: var(--vscode-descriptionForeground, ${isDark ? '#9d9d9d' : '#717171'});
+        --csv-accent: var(--vscode-focusBorder, #007acc);
       }
       body { font-family: ${this.escapeCss(fontFamily)}; font-size: ${fontSize}px; margin: 0; padding: 0; user-select: none; background: var(--csv-bg); color: var(--csv-text); overflow: hidden; }
       .csv-toolbar { height: 42px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--csv-border); background: var(--csv-surface); }
@@ -2044,85 +2049,56 @@ class CsvEditorController {
     <link rel="stylesheet" href="${styleUri}">
   </head>
   <body data-theme="${isDark ? 'dark' : 'light'}">
-    <div class="csv-app-shell">
-      <header class="sheet-titlebar">
-        <span class="sheet-app-mark" aria-hidden="true">${'<span></span>'.repeat(9)}</span>
-        <span class="sheet-product-name">CSV Edit</span>
-        <span class="sheet-document-title">${this.escapeHtml(documentName)}</span>
-        <span class="sheet-title-spacer"></span>
-        <span class="sheet-save-state">Local file</span>
-        <button id="viewTextButton" class="titlebar-action" type="button" title="Open as text / テキストで開く">Text</button>
-        <button id="toolbarTheme" class="titlebar-action" type="button" title="Theme / テーマ">${isDark ? 'Dark' : 'Light'}</button>
+    <div class="csv-workbench">
+      <header class="csv-commandbar" aria-label="CSV commands">
+        <div class="command-primary">
+          <button id="undoButton" class="command-button icon-only" type="button" title="Undo / 元に戻す" aria-label="Undo">↶</button>
+          <button id="redoButton" class="command-button icon-only" type="button" title="Redo / やり直す" aria-label="Redo">↷</button>
+          <span class="command-separator" aria-hidden="true"></span>
+          <button id="ribbonAddRow" class="command-button" type="button" title="Insert row below / 下に行を追加"><span aria-hidden="true">＋</span> Row</button>
+          <button id="ribbonAddColumn" class="command-button" type="button" title="Insert column right / 右に列を追加"><span aria-hidden="true">＋</span> Column</button>
+          <span class="command-separator" aria-hidden="true"></span>
+          <button id="toolbarFind" class="command-button" type="button" title="Find and replace / 検索と置換"><span aria-hidden="true">⌕</span> Find</button>
+          <button id="toolbarFilter" class="command-button" type="button" title="Filter rows / 行をフィルター"><span aria-hidden="true">▽</span> Filter</button>
+          <details id="commandOverflow" class="command-overflow">
+            <summary title="More actions / その他の操作" aria-label="More actions">…</summary>
+            <div class="command-menu" role="menu">
+              <button id="ribbonCopy" type="button" role="menuitem">Copy selection</button>
+              <button id="ribbonDeleteRow" type="button" role="menuitem">Delete row</button>
+              <button id="ribbonDeleteColumn" type="button" role="menuitem">Delete column</button>
+              <span class="menu-separator" aria-hidden="true"></span>
+              <button id="toolbarTools" type="button" role="menuitem">Clean and transform…</button>
+              <button id="toolbarValidate" type="button" role="menuitem">Validate data…</button>
+              <span class="menu-separator" aria-hidden="true"></span>
+              <button id="ribbonZoomOut" type="button" role="menuitem">Zoom out</button>
+              <button id="ribbonZoomReset" type="button" role="menuitem">Reset zoom</button>
+              <button id="ribbonZoomIn" type="button" role="menuitem">Zoom in</button>
+              <span class="menu-separator" aria-hidden="true"></span>
+              <button id="viewTextButton" type="button" role="menuitem">Open as text</button>
+              <button id="toolbarTheme" type="button" role="menuitem">Theme: ${isDark ? 'Dark' : 'Light'}</button>
+            </div>
+          </details>
+        </div>
+        <span class="document-context" title="${this.escapeHtml(documentName)}">${this.escapeHtml(documentName)}</span>
       </header>
 
-      <nav class="ribbon-tabs" role="tablist" aria-label="CSV Edit ribbon">
-        <button class="ribbon-tab" type="button" role="tab" aria-selected="true" data-ribbon-tab="home">Home</button>
-        <button class="ribbon-tab" type="button" role="tab" aria-selected="false" data-ribbon-tab="data">Data</button>
-        <button class="ribbon-tab" type="button" role="tab" aria-selected="false" data-ribbon-tab="view">View</button>
-      </nav>
-
-      <div class="ribbon-host">
-        <section class="ribbon-panel active" role="tabpanel" data-ribbon-panel="home" aria-label="Home tools">
-          <div class="ribbon-group">
-            <button id="undoButton" class="ribbon-button compact" type="button" title="Undo / 元に戻す"><span class="ribbon-icon">↶</span><span class="ribbon-label">Undo</span></button>
-            <button id="redoButton" class="ribbon-button compact" type="button" title="Redo / やり直す"><span class="ribbon-icon">↷</span><span class="ribbon-label">Redo</span></button>
-            <span class="ribbon-group-label">History</span>
-          </div>
-          <div class="ribbon-group">
-            <button id="ribbonCopy" class="ribbon-button" type="button" title="Copy selection / 選択範囲をコピー"><span class="ribbon-icon">▣</span><span class="ribbon-label">Copy</span></button>
-            <span class="ribbon-group-label">Clipboard</span>
-          </div>
-          <div class="ribbon-group">
-            <button id="ribbonAddRow" class="ribbon-button accent" type="button" title="Insert row below / 下に行を追加"><span class="ribbon-icon">＋ Row</span><span class="ribbon-label">Insert</span></button>
-            <button id="ribbonAddColumn" class="ribbon-button accent" type="button" title="Insert column right / 右に列を追加"><span class="ribbon-icon">＋ Col</span><span class="ribbon-label">Insert</span></button>
-            <button id="ribbonDeleteRow" class="ribbon-button" type="button" title="Delete active row / 行を削除"><span class="ribbon-icon">− Row</span><span class="ribbon-label">Delete</span></button>
-            <button id="ribbonDeleteColumn" class="ribbon-button" type="button" title="Delete active column / 列を削除"><span class="ribbon-icon">− Col</span><span class="ribbon-label">Delete</span></button>
-            <span class="ribbon-group-label">Cells</span>
-          </div>
-          <div class="ribbon-group">
-            <button id="toolbarFind" class="ribbon-button accent" type="button" title="Find and replace / 検索と置換"><span class="ribbon-icon">⌕</span><span class="ribbon-label">Find</span></button>
-            <span class="ribbon-group-label">Editing</span>
-          </div>
-        </section>
-
-        <section class="ribbon-panel" role="tabpanel" data-ribbon-panel="data" aria-label="Data tools" hidden>
-          <div class="ribbon-group">
-            <button id="toolbarFilter" class="ribbon-button accent" type="button" title="Filter rows / 行をフィルター"><span class="ribbon-icon">▽</span><span class="ribbon-label">Filter</span></button>
-            <button id="toolbarTools" class="ribbon-button accent" type="button" title="Clean and transform / データツール"><span class="ribbon-icon">◇</span><span class="ribbon-label">Transform</span></button>
-            <button id="toolbarValidate" class="ribbon-button accent" type="button" title="Validate data / データを検証"><span class="ribbon-icon">✓</span><span class="ribbon-label">Validate</span></button>
-            <span class="ribbon-group-label">Data operations</span>
-          </div>
-        </section>
-
-        <section class="ribbon-panel" role="tabpanel" data-ribbon-panel="view" aria-label="View tools" hidden>
-          <div class="ribbon-group">
-            <button id="ribbonZoomOut" class="ribbon-button compact" type="button" title="Zoom out"><span class="ribbon-icon">−</span><span class="ribbon-label">Zoom</span></button>
-            <button id="ribbonZoomReset" class="ribbon-button" type="button" title="Reset zoom"><span class="ribbon-icon">100%</span><span class="ribbon-label">Reset</span></button>
-            <button id="ribbonZoomIn" class="ribbon-button compact" type="button" title="Zoom in"><span class="ribbon-icon">＋</span><span class="ribbon-label">Zoom</span></button>
-            <span class="ribbon-group-label">Zoom</span>
-          </div>
-        </section>
+      <div class="cell-bar" role="group" aria-label="Selected cell value">
+        <input id="formulaNameBox" class="cell-address" type="text" value="R1:C1" readonly aria-label="Active cell">
+        <textarea id="formulaInput" class="cell-input" rows="1" spellcheck="false" aria-label="Cell value" placeholder="Select a cell to edit its value"></textarea>
+        <button id="formulaCancel" class="cell-action" type="button" title="Cancel edit / 編集をキャンセル" aria-label="Cancel edit">×</button>
+        <button id="formulaApply" class="cell-action" type="button" title="Apply edit / 編集を確定" aria-label="Apply edit">✓</button>
       </div>
 
-      <div class="formula-bar" role="group" aria-label="Cell editor">
-        <input id="formulaNameBox" class="formula-name-box" type="text" value="A1" readonly aria-label="Active cell">
-        <span class="formula-fx" aria-hidden="true">fx</span>
-        <textarea id="formulaInput" class="formula-input" rows="1" spellcheck="false" aria-label="Cell value"></textarea>
-        <button id="formulaCancel" class="formula-action" type="button" title="Cancel edit / 編集をキャンセル">×</button>
-        <button id="formulaApply" class="formula-action formula-apply" type="button" title="Apply edit / 編集を確定">✓</button>
-      </div>
-
-      <div id="csv-root" class="table-container" data-sepcode="${sepCode}" data-fontsize="${fontSize}" data-wheelzoomenabled="${mouseWheelZoomEnabled ? '1' : '0'}" data-wheelzoominvert="${mouseWheelZoomInvert ? '1' : '0'}" data-nextchunkstart="${nextChunkStart >= 0 ? nextChunkStart : ''}" data-hasmorechunks="${hasRemoteChunks ? '1' : '0'}">
+      <div id="csv-root" class="table-container" data-sepcode="${sepCode}" data-fontsize="${fontSize}" data-rowcount="${rowCount}" data-columncount="${columnCount}" data-wheelzoomenabled="${mouseWheelZoomEnabled ? '1' : '0'}" data-wheelzoominvert="${mouseWheelZoomInvert ? '1' : '0'}" data-nextchunkstart="${nextChunkStart >= 0 ? nextChunkStart : ''}" data-hasmorechunks="${hasRemoteChunks ? '1' : '0'}">
         ${tableHtml}
       </div>
 
       <footer class="csv-status" role="status">
-        <span id="selectionStatus">Ready</span>
-        <span id="sizeStatus"></span>
+        <span id="selectionStatus">No selection</span>
+        <span id="sizeStatus">${rowCount} rows · ${columnCount} columns</span>
         <span id="visibleStatus"></span>
         <span class="status-spacer"></span>
-        <span>Delimiter: ${this.escapeHtml(separator === '\t' ? 'TAB' : separator)}</span>
-        <span>UTF-8</span>
+        <span title="Delimiter">${this.escapeHtml(separator === '\t' ? 'TAB' : separator)}</span>
         <span id="zoomStatus">100%</span>
       </footer>
     </div>

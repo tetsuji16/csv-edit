@@ -233,7 +233,7 @@
         },
         "csv.cellPadding": {
           "type": "number",
-          "default": 4,
+          "default": 2,
           "description": "Vertical padding in pixels for table cells."
         },
         "csv.columnColorMode": {
@@ -242,7 +242,7 @@
             "type",
             "theme"
           ],
-          "default": "type",
+          "default": "theme",
           "description": "Column text color mode. 'type' uses CSV's type-based colors. 'theme' uses the current theme foreground color for all columns."
         },
         "csv.columnColorPalette": {
