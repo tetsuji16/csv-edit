@@ -1,5 +1,5 @@
 {
-  "extension.description": "A fast, local-first CSV, TSV, TAB and PSV grid editor designed for Visual Studio Code. Completely rewritten from the jonaraphael/csv fork.",
+  "extension.description": "Edit CSV, TSV, TAB and PSV files in a fast, local-first grid that keeps plain-text files, Git diffs and VS Code workflows intact.",
   "command.openGrid": "CSV Edit: Open as Grid",
   "command.openText": "CSV Edit: Open as Text",
   "command.toggleView": "CSV Edit: Toggle Grid/Text View",

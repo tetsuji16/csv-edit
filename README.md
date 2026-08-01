@@ -1,16 +1,24 @@
 # CSV Edit
 
-Fast, focused editing for CSV and other delimited text files in Visual Studio Code.
+![CSV Edit — fast, local-first editing for CSV, TSV, TAB and PSV](https://raw.githubusercontent.com/tetsuji16/csv-edit/main/images/marketplace-hero.png)
 
-CSV Edit opens `.csv`, `.tsv`, `.tab`, and `.psv` files as a compact grid while
-keeping the underlying document as plain text. Saving, source control, diffs,
-Auto Save, and VS Code undo history continue to work as expected. All document
-processing stays on your machine.
+Edit delimited text like a table—without turning it into a spreadsheet file.
 
-> CSV Editは、CSV・TSV・TAB・PSVをVS Code上で素早く編集するための、
-> ローカル完結型グリッドエディターです。
+CSV Edit opens `.csv`, `.tsv`, `.tab`, and `.psv` files in a fast, compact grid
+that feels native to Visual Studio Code. The source stays plain text, so Save,
+Auto Save, Git diffs, and VS Code undo history keep working as expected. Parsing,
+editing, search, and data tools all run locally on your machine.
 
-![CSV Edit compact grid interface](https://raw.githubusercontent.com/tetsuji16/csv-edit/main/images/screenshot-light.png)
+> CSV Editは、CSV・TSV・TAB・PSVを高速なグリッドで編集できる、
+> ローカル完結型のVS Code拡張機能です。テキスト形式やGitの差分をそのまま保てます。
+
+## Why CSV Edit
+
+- **Stay in VS Code** — inspect and edit delimited files without switching apps
+- **Keep clean diffs** — the document remains ordinary delimited text
+- **Work locally** — file contents, searches, and transformations are not uploaded
+- **Handle real data** — quoted fields, multiline values, BOM, and line endings are preserved
+- **Move quickly** — keyboard editing, rectangular selection, filters, and bulk tools are built in
 
 ## Designed for CSV work
 
