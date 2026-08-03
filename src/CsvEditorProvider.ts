@@ -1001,12 +1001,13 @@ class CsvEditorController {
       matchCase: !!optsRaw.matchCase
     };
 
-    const postResult = (payload: { matches: Array<{ row: number; col: number; value: string }>; invalidRegex: boolean }) => {
+    const postResult = (payload: { matches: Array<{ row: number; col: number; value: string }>; invalidRegex: boolean; truncated?: boolean }) => {
       this.currentWebviewPanel?.webview.postMessage({
         type: 'findMatchesResult',
         requestId,
         matches: payload.matches,
-        invalidRegex: payload.invalidRegex
+        invalidRegex: payload.invalidRegex,
+        truncated: !!payload.truncated
       });
     };
 
@@ -1027,6 +1028,11 @@ class CsvEditorController {
     const hiddenRows = this.getHiddenRows();
     const offset = Math.min(Math.max(0, hiddenRows), data.length);
     const matches: Array<{ row: number; col: number; value: string }> = [];
+    // Cap the number of reported matches. A sub-string query against a large CSV
+    // can match millions of cells; collecting them all would blow up memory and
+    // the postMessage payload. We stop early and flag the truncation.
+    const MAX_FIND_MATCHES = 50_000;
+    let truncated = false;
 
     for (let row = offset; row < data.length; row++) {
       const current = data[row] || [];
@@ -1034,12 +1040,17 @@ class CsvEditorController {
         const value = String(current[col] ?? '');
         regex.lastIndex = 0;
         if (regex.test(value)) {
+          if (matches.length >= MAX_FIND_MATCHES) {
+            truncated = true;
+            break;
+          }
           matches.push({ row, col, value });
         }
       }
+      if (truncated) {break;}
     }
 
-    postResult({ matches, invalidRegex: false });
+    postResult({ matches, invalidRegex: false, truncated });
   }
 
   // Apply an edit to a 2D data array, enforcing virtual row/cell invariants.
@@ -2345,8 +2356,12 @@ class CsvEditorController {
   }
 
   private escapeCss(text: string): string {
-    // conservative; ok for font-family lists
-    return text.replace(/[\\"]/g, m => (m === '\\' ? '\\\\' : '\\"'));
+    // Defense-in-depth for a value injected into a <style> block (font-family).
+    // Keep only characters that are valid/expected inside a CSS font-family list:
+    // Unicode letters, digits, spaces, single/double quotes, commas, periods and
+    // hyphens. Stripping everything else prevents CSS-injection via a crafted
+    // `csv.fontFamily` setting (e.g. `; background:url(...)` or `/* */`).
+    return String(text).replace(/[^A-Za-z0-9 _,\.\-'"’“”]/g, '');
   }
 
   private isDate(value: string): boolean {
@@ -3055,6 +3070,9 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
       updates: Array<{ row: number; col: number; value: string }>
     ): string | undefined {
       return CsvEditorProvider.applyFieldUpdatesPreservingFormat(text, delimiter, updates);
+    },
+    escapeCss(text: string): string {
+      return new (CsvEditorController as any)({} as any).escapeCss(text);
     },
     computePastePlan(
       matrix: string[][],

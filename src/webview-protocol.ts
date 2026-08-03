@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-const index = z.number().int().nonnegative();
+// Upper bounds on coordinates/counts. A malicious or buggy webview could send an
+// astronomically large `index` (e.g. 1e15); without a cap the editor would try to
+// `splice`/trailing-fill that many empty rows/columns, allocating huge arrays and
+// effectively hanging the editor (DoS). These caps are far beyond any real CSV
+// dimensions while keeping the validation cheap.
+const MAX_INDEX = 1_000_000;
+const index = z.number().int().nonnegative().max(MAX_INDEX);
 const cell = z.object({ row: index, col: index, value: z.string() });
 const selection = z.object({
   minRow: index,
@@ -13,7 +19,7 @@ const selection = z.object({
 export const webviewMessageSchema = z.discriminatedUnion('type', [
   cell.extend({ type: z.literal('editCell') }),
   z.object({ type: z.literal('replaceCells'), replacements: z.array(cell).max(1_000_000) }),
-  z.object({ type: z.literal('pasteCells'), text: z.string(), anchorRow: index, anchorCol: index, selection }),
+  z.object({ type: z.literal('pasteCells'), text: z.string().max(100_000_000), anchorRow: index, anchorCol: index, selection }),
   z.object({ type: z.literal('requestChunk'), start: index, requestId: z.number().int() }),
   z.object({ type: z.literal('findMatches'), requestId: z.number().int(), query: z.string(), options: z.record(z.string(), z.unknown()).optional() }),
   z.object({ type: z.literal('save') }),

@@ -1264,6 +1264,7 @@ const findReplaceState = {
   invalidRegex: false
 };
 let findMatches = [];
+let findMatchesTruncated = false;
 let currentMatchIndex = -1;
 let findDebounce = null;
 let findFocusBeforeOpen = null;
@@ -1306,7 +1307,8 @@ const updateFindStatus = () => {
     findStatus.innerText = findReplaceState.invalidRegex ? 'Invalid regex' : 'No results';
     return;
   }
-  findStatus.innerText = `${currentMatchIndex + 1} of ${findMatches.length}`;
+  const suffix = findMatchesTruncated ? '+' : '';
+  findStatus.innerText = `${currentMatchIndex + 1} of ${findMatches.length}${suffix}`;
 };
 const updateFindControls = () => {
   const hasQuery = findInput.value.length > 0;
@@ -2396,6 +2398,7 @@ window.addEventListener('message', event => {
     }
 
     findReplaceState.invalidRegex = !!message.invalidRegex;
+    findMatchesTruncated = !!message.truncated;
     findMatches = Array.isArray(message.matches)
       ? message.matches
         .map(raw => {

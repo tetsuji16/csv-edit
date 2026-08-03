@@ -48,4 +48,14 @@ describe('Webview find/replace widget', () => {
     assert.ok(webviewSource.includes("type: 'findMatches'"));
     assert.ok(webviewSource.includes("message.type === 'findMatchesResult'"));
   });
+
+  it('propagates a truncation flag so huge CSVs do not exhaust memory', () => {
+    // Provider must cap reported matches and flag truncation.
+    assert.ok(providerSource.includes('MAX_FIND_MATCHES'));
+    assert.ok(providerSource.includes('truncated = true'));
+    assert.ok(providerSource.includes('truncated: !!payload.truncated'));
+    // Webview must surface the truncated state in the status readout.
+    assert.ok(webviewSource.includes('findMatchesTruncated'));
+    assert.ok(webviewSource.includes('const suffix = findMatchesTruncated ?'));
+  });
 });
