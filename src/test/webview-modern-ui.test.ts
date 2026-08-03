@@ -47,6 +47,23 @@ test('status updates use document metadata rather than scanning every rendered c
   assert.doesNotMatch(webview, /new Set\(Array\.from\(table\.querySelectorAll\('\[data-row\]'\)\)/);
 });
 
+test('CSS lives in media/editor.css, not duplicated in the provider <style>', () => {
+  // The provider <style> must only carry build-time values (theme tokens, font,
+  // cell padding, per-column colors). Layout/visual rules belong exclusively in
+  // media/editor.css so there is a single source of truth and no drift.
+  const deadClasses = ['.csv-toolbar', '.csv-status', '.csv-panel', '#findReplaceWidget'];
+  for (const sel of deadClasses) {
+    assert.doesNotMatch(provider, new RegExp(`${sel.replace(/[.#]/g, '\\$&')}\\s*\\{`), `provider <style> must not define ${sel}`);
+  }
+  // The shipped stylesheet must own every visual rule the markup relies on.
+  for (const sel of ['.csv-link', '.highlight', '.active-match', '#contextMenu', '#findReplaceWidget .fr-input', '#findReplaceWidget .fr-toggle-btn']) {
+    assert.match(stylesheet, new RegExp(sel.replace(/[.#]/g, '\\$&')), `editor.css must define ${sel}`);
+  }
+  // cellPadding must actually reach the stylesheet via a CSS variable.
+  assert.match(provider, /--csv-cell-padding:\s*\$\{cellPadding\}px/);
+  assert.match(stylesheet, /var\(--csv-cell-padding, 2px\)/);
+});
+
 test('bulk data tools use preview and explicit apply messages', () => {
   assert.match(webview, /type: 'previewDataTool'/);
   assert.match(webview, /type: 'applyDataTool'/);
