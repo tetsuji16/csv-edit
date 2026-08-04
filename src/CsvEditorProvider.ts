@@ -1643,6 +1643,9 @@ class CsvEditorController {
     } else {
       bodyData = data.slice(offset);
     }
+    // `allRows` is the same slice as `bodyData`; reuse it instead of copying
+    // `data` a second time (matters for very large CSVs).
+    const allRows = bodyData;
     const visibleForWidth = headerFlag ? [headerRow, ...bodyData] : bodyData;
     let numColumns = visibleForWidth.reduce((max, row) => Math.max(max, row.length), 0);
     if (numColumns === 0) {numColumns = 1;} // ensure at least 1 column for the virtual row
@@ -1662,7 +1665,6 @@ class CsvEditorController {
     const BASE_CHUNK_ROWS = 1000;
     const MAX_CELLS_PER_CHUNK = 20000;
     const MIN_CHUNK_ROWS = 10;
-    const allRows = headerFlag ? data.slice(offset + 1) : data.slice(offset);
     const allRowsCount = allRows.length; // preserve total before any truncation
     const chunkRows = Math.max(
       MIN_CHUNK_ROWS,

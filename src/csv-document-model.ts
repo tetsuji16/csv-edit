@@ -9,16 +9,18 @@ export type CsvSnapshot = {
 };
 
 export class CsvDocumentModel {
+  // Cache keyed only by document version + delimiter. We intentionally do NOT
+  // retain the full document text: for large CSVs that would double the memory
+  // footprint (the VS Code document already owns the text) and the previous
+  // `text === text` identity check was an O(n) string compare. VS Code bumps the
+  // document version on every edit, so (version, delimiter) uniquely identifies
+  // a parsed snapshot within a session.
   private cached:
-    | { version: number; delimiter: string; text: string; snapshot: CsvSnapshot }
+    | { version: number; delimiter: string; snapshot: CsvSnapshot }
     | undefined;
 
   public read(version: number, text: string, delimiter: string): CsvSnapshot {
-    if (
-      this.cached?.version === version &&
-      this.cached.delimiter === delimiter &&
-      this.cached.text === text
-    ) {
+    if (this.cached?.version === version && this.cached.delimiter === delimiter) {
       return this.cached.snapshot;
     }
     const hasBom = text.charCodeAt(0) === 0xfeff;
@@ -31,7 +33,7 @@ export class CsvDocumentModel {
       lineEnding: content.includes('\r\n') ? '\r\n' : content.includes('\r') ? '\r' : '\n',
       hasBom
     };
-    this.cached = { version, delimiter, text, snapshot };
+    this.cached = { version, delimiter, snapshot };
     return snapshot;
   }
 
@@ -40,7 +42,7 @@ export class CsvDocumentModel {
       delimiter: snapshot.delimiter,
       newline: snapshot.lineEnding
     });
-    return snapshot.hasBom ? `\ufeff${body}` : body;
+    return snapshot.hasBom ? `﻿${body}` : body;
   }
 
   public invalidate(): void {
