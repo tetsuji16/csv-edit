@@ -88,6 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const keys = [
       'csvEdit.theme',
+      'csvEdit.defaultView',
       'csv.fontFamily',
       'csv.cellPadding',
       'csv.columnColorMode',
@@ -101,7 +102,16 @@ export function activate(context: vscode.ExtensionContext) {
     ];
     const changed = keys.filter(k => e.affectsConfiguration(k));
     if (changed.length) {
-      CsvEditorProvider.editors.forEach(ed => ed.refresh());
+      if (e.affectsConfiguration('csvEdit.defaultView')) {
+        // Switching default view (grid/text) requires re-opening the document
+        // with the appropriate handler.
+        const target = vscode.workspace
+          .getConfiguration('csvEdit')
+          .get<'grid' | 'text'>('defaultView', 'grid');
+        CsvEditorProvider.editors.forEach(ed => ed.switchView(target));
+      } else {
+        CsvEditorProvider.editors.forEach(ed => ed.refresh());
+      }
     }
   });
   context.subscriptions.push(cfgListener);

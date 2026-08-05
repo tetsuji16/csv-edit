@@ -293,6 +293,29 @@ class CsvEditorController {
     }
   }
 
+  /**
+   * Re-open the current document in the grid editor or the default text editor,
+   * depending on the requested target view. Used when the user changes the
+   * `csvEdit.defaultView` setting so the open editor follows immediately.
+   */
+  public async switchView(target: 'grid' | 'text'): Promise<void> {
+    const alreadyGrid = this.currentWebviewPanel !== undefined;
+    if (target === 'grid' && alreadyGrid) { return; }
+    if (target === 'text' && !alreadyGrid) { return; }
+    const uri = this.document.uri;
+    const viewType = target === 'grid' ? CsvEditorProvider.viewType : 'default';
+    const opts: any = {
+      viewColumn: this.currentWebviewPanel?.viewColumn,
+      preserveFocus: false,
+      preview: false
+    };
+    try {
+      await vscode.commands.executeCommand('vscode.openWith', uri, viewType, opts);
+    } catch (e) {
+      console.error('CSV: switchView failed', e);
+    }
+  }
+
   private async confirmLargeFileOpen(
     config: vscode.WorkspaceConfiguration,
     webviewPanel: vscode.WebviewPanel,
