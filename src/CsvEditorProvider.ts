@@ -549,8 +549,11 @@ class CsvEditorController {
     try {
       const separator = this.getSeparator();
       const oldText = this.document.getText();
-      const result = Papa.parse(oldText, { dynamicTyping: false, delimiter: separator });
-      const data = result.data as string[][];
+      // Reuse the cached parse snapshot instead of re-parsing on every keystroke
+      // edit; mutateDataForEdit mutates in place, so copy the rows first to avoid
+      // polluting the shared cache entry.
+      const snapshot = this.documentModel.read(this.document.version, oldText, separator);
+      const data = snapshot.rows.map(row => row.slice());
       const hadRows = data.length;
       const hadColsAtRow = (data[row] ? data[row].length : 0);
       const previousValue =
@@ -618,8 +621,9 @@ class CsvEditorController {
     try {
       const separator = this.getSeparator();
       const oldText = this.document.getText();
-      const result = Papa.parse(oldText, { dynamicTyping: false, delimiter: separator });
-      const data = result.data as string[][];
+      // Reuse the cached parse snapshot; replaceCells only reads coordinates and
+      // pushes updates, so the cached rows can be shared without copying.
+      const data = this.documentModel.read(this.document.version, oldText, separator).rows;
       const updates: Array<{ row: number; col: number; value: string }> = [];
 
       let changed = false;
@@ -854,8 +858,10 @@ class CsvEditorController {
     try {
       const separator = this.getSeparator();
       const oldText = this.document.getText();
-      const result = Papa.parse(oldText, { dynamicTyping: false, delimiter: separator });
-      const data = result.data as string[][];
+      // Reuse the cached parse snapshot; applyPasteMatrixToData mutates in place,
+      // so copy the rows first to avoid polluting the shared cache entry.
+      const snapshot = this.documentModel.read(this.document.version, oldText, separator);
+      const data = snapshot.rows.map(row => row.slice());
 
       const pasteResult = CsvEditorController.applyPasteMatrixToData(data, matrix, anchorRow, anchorCol, selection);
       if (!pasteResult.changed) {
@@ -1119,8 +1125,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since insertColumn mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     for (const row of data) {
       if (index > row.length) {
         while (row.length < index) {row.push('');}
@@ -1145,8 +1151,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since insertColumns mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     for (let k = 0; k < count; k++) {
       for (const row of data) {
         if (index > row.length) {
@@ -1172,8 +1178,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since deleteColumn mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     for (const row of data) {
       if (index < row.length) {
         row.splice(index, 1);
@@ -1197,8 +1203,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since deleteColumns mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     const numColumns = data.reduce((max, row) => Math.max(max, row.length), 0);
     const sorted = this.normalizeIndices(indices, numColumns).sort((a, b) => b - a);
     for (const idx of sorted) {
@@ -1229,9 +1235,10 @@ class CsvEditorController {
     const hidden       = this.getHiddenRows();
 
     const text   = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    // Exclude virtual/trailing empty rows from sort input
-    const rows   = this.trimTrailingEmptyRows(result.data as string[][]);
+    // Reuse the cached parse snapshot (copy, since sortColumn mutates in place).
+    const rows   = this.trimTrailingEmptyRows(
+      this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice())
+    );
     const treatHeader  = this.getEffectiveHeader(rows, this.getHiddenRows());
 
     const offset = Math.min(Math.max(0, hidden), rows.length);
@@ -1313,8 +1320,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since insertRow mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     const numColumns = data.reduce((max, r) => Math.max(max, r.length), 0);
     const newRow = Array(numColumns).fill('');
     if (index > data.length) {
@@ -1339,8 +1346,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since insertRows mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     const numColumns = data.reduce((max, r) => Math.max(max, r.length), 0);
     for (let k = 0; k < count; k++) {
       const newRow = Array(numColumns).fill('');
@@ -1366,8 +1373,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since deleteRow mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     if (index < data.length) {
       data.splice(index, 1);
     }
@@ -1389,8 +1396,8 @@ class CsvEditorController {
     this.isUpdatingDocument = true;
     const separator = this.getSeparator();
     const text = this.document.getText();
-    const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-    const data = result.data as string[][];
+    // Reuse the cached parse snapshot (copy, since deleteRows mutates in place).
+    const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
     const sorted = this.normalizeIndices(indices, data.length).sort((a, b) => b - a);
     for (const idx of sorted) {
       if (idx < data.length) {
@@ -1458,8 +1465,8 @@ class CsvEditorController {
     try {
       const separator = this.getSeparator();
       const text = this.document.getText();
-      const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-      const data = result.data as string[][];
+      // Reuse the cached parse snapshot (copy, since reorderColumns mutates in place).
+      const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
       const numColumns = data.reduce((max, row) => Math.max(max, row.length), 0);
       if (numColumns <= 0) {return;}
 
@@ -1496,8 +1503,8 @@ class CsvEditorController {
     try {
       const separator = this.getSeparator();
       const text = this.document.getText();
-      const result = Papa.parse(text, { dynamicTyping: false, delimiter: separator });
-      const data = result.data as string[][];
+      // Reuse the cached parse snapshot (copy, since reorderRows mutates in place).
+      const data = this.documentModel.read(this.document.version, text, separator).rows.map(row => row.slice());
       if (!data.length) {return;}
 
       const { reordered, changed } = this.reorderByIndices(data, indices, beforeIndex);
