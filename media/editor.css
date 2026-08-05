@@ -1,3 +1,13 @@
+.codicon {
+  font: normal normal normal 16px/1 codicon;
+  display: inline-block;
+  text-decoration: none;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
 :root {
   --csv-hover: var(--vscode-toolbar-hoverBackground, color-mix(in srgb, var(--csv-text) 8%, transparent));
   --csv-active: var(--vscode-toolbar-activeBackground, color-mix(in srgb, var(--csv-text) 12%, transparent));
@@ -69,6 +79,7 @@ body {
 
 .command-button:active { background: var(--csv-active); }
 .command-button.icon-only { width: 26px; padding: 0; font-size: 16px; }
+.command-button .codicon { font-size: 16px; line-height: 1; }
 .command-separator { width: 1px; height: 18px; margin: 0 3px; background: var(--csv-border); }
 .document-context {
   min-width: 0;
@@ -164,6 +175,7 @@ body {
 .cell-action:focus-visible { background: var(--csv-hover); color: var(--csv-text); outline: none; }
 
 .table-container {
+  position: relative;
   width: 100%;
   height: auto !important;
   min-height: 0;
@@ -284,7 +296,8 @@ body {
 .csv-panel button { min-height: 28px !important; border-radius: 2px !important; }
 
 #findReplaceWidget {
-  top: 36px !important;
+  position: absolute;
+  top: 4px !important;
   right: 12px !important;
   width: min(540px, calc(100vw - 24px)) !important;
   min-width: 0 !important;
@@ -295,6 +308,7 @@ body {
   background: var(--vscode-editorWidget-background, var(--csv-surface)) !important;
   color: var(--vscode-editorWidget-foreground, var(--csv-text)) !important;
   box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28)) !important;
+  z-index: 30 !important;
 }
 #findReplaceWidget .fr-gutter,
 #findReplaceWidget .fr-overflow-menu { background: var(--vscode-editorWidget-background, var(--csv-surface)) !important; border-color: var(--csv-border) !important; }
@@ -386,6 +400,9 @@ body {
   justify-content: center;
   padding: 0;
 }
+#findReplaceWidget .fr-icon-btn .codicon,
+#findReplaceWidget .fr-action-btn .codicon,
+#findReplaceWidget .fr-caret-btn .codicon { font-size: 16px; line-height: 1; }
 #findReplaceWidget .fr-icon-btn:hover,
 #findReplaceWidget .fr-action-btn:hover,
 #findReplaceWidget .fr-caret-btn:hover { background: var(--csv-hover); color: var(--csv-text); }

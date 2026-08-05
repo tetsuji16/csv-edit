@@ -1908,6 +1908,9 @@ class CsvEditorController {
     const styleUri = webview.asWebviewUri(
       vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'editor.css'))
     );
+    const codiconUri = webview.asWebviewUri(
+      vscode.Uri.file(path.join(this.context.extensionPath, 'media', 'codicon.ttf'))
+    );
 
     // Safe separator transport (assumes single character; see assumptions)
     const sepCode = (separator && separator.length > 0) ? separator.codePointAt(0)! : ','.codePointAt(0)!;
@@ -1922,6 +1925,11 @@ class CsvEditorController {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSV</title>
     <style nonce="${nonce}">
+      @font-face {
+        font-family: 'codicon';
+        font-display: block;
+        src: url('${codiconUri}') format('truetype');
+      }
       :root {
         color-scheme: ${isDark ? 'dark' : 'light'};
         --csv-bg: var(--vscode-editor-background, ${isDark ? '#1e1e1e' : '#ffffff'});
@@ -1956,7 +1964,7 @@ class CsvEditorController {
           <button id="ribbonAddRow" class="command-button" type="button" title="Insert row below / 下に行を追加"><span aria-hidden="true">＋</span> Row</button>
           <button id="ribbonAddColumn" class="command-button" type="button" title="Insert column right / 右に列を追加"><span aria-hidden="true">＋</span> Column</button>
           <span class="command-separator" aria-hidden="true"></span>
-          <button id="toolbarFind" class="command-button" type="button" title="Find and replace / 検索と置換"><span aria-hidden="true">⌕</span> Find</button>
+          <button id="toolbarFind" class="command-button" type="button" title="Find and replace / 検索と置換"><span class="codicon codicon-search" aria-hidden="true"></span> Find</button>
           <button id="toolbarFilter" class="command-button" type="button" title="Filter rows / 行をフィルター"><span aria-hidden="true">▽</span> Filter</button>
           <details id="commandOverflow" class="command-overflow">
             <summary title="More actions / その他の操作" aria-label="More actions">…</summary>
@@ -2021,7 +2029,7 @@ class CsvEditorController {
 
     <div id="findReplaceWidget" class="replace-collapsed" role="group" aria-label="Find and Replace">
       <div id="replaceToggleGutter" class="fr-gutter">
-        <button id="replaceToggle" class="fr-caret-btn" type="button" aria-label="Toggle Replace" aria-expanded="false">›</button>
+        <button id="replaceToggle" class="fr-caret-btn" type="button" aria-label="Toggle Replace" aria-expanded="false"><span class="codicon codicon-chevron-right"></span></button>
       </div>
       <div class="fr-content">
         <div class="fr-row fr-row-find">
@@ -2035,10 +2043,10 @@ class CsvEditorController {
           </div>
           <div id="findStatus" class="fr-status">No results</div>
           <div class="fr-divider" aria-hidden="true"></div>
-          <button id="findPrev" class="fr-icon-btn" type="button" aria-label="Previous Match" title="Previous Match" disabled>↑</button>
-          <button id="findNext" class="fr-icon-btn" type="button" aria-label="Next Match" title="Next Match" disabled>↓</button>
-          <button id="findMenuButton" class="fr-icon-btn" type="button" aria-label="More Find Options" title="More Find Options">☰</button>
-          <button id="findClose" class="fr-icon-btn fr-close-btn" type="button" aria-label="Close Find and Replace" title="Close">✕</button>
+          <button id="findPrev" class="fr-icon-btn" type="button" aria-label="Previous Match" title="Previous Match" disabled><span class="codicon codicon-chevron-up"></span></button>
+          <button id="findNext" class="fr-icon-btn" type="button" aria-label="Next Match" title="Next Match" disabled><span class="codicon codicon-chevron-down"></span></button>
+          <button id="findMenuButton" class="fr-icon-btn" type="button" aria-label="More Find Options" title="More Find Options"><span class="codicon codicon-ellipsis"></span></button>
+          <button id="findClose" class="fr-icon-btn fr-close-btn" type="button" aria-label="Close Find and Replace" title="Close"><span class="codicon codicon-close"></span></button>
         </div>
         <div class="fr-row fr-row-replace">
           <div class="fr-input-wrap">
@@ -2048,8 +2056,8 @@ class CsvEditorController {
             </div>
           </div>
           <div class="fr-actions">
-            <button id="replaceOne" class="fr-action-btn" type="button" aria-label="Replace" title="Replace" disabled>↵</button>
-            <button id="replaceAll" class="fr-action-btn" type="button" aria-label="Replace All" title="Replace All" disabled>⇅</button>
+            <button id="replaceOne" class="fr-action-btn" type="button" aria-label="Replace" title="Replace" disabled><span class="codicon codicon-replace"></span></button>
+            <button id="replaceAll" class="fr-action-btn" type="button" aria-label="Replace All" title="Replace All" disabled><span class="codicon codicon-replace-all"></span></button>
           </div>
         </div>
         <div id="findOverflowMenu" class="fr-overflow-menu" role="menu" aria-label="Find Options">
