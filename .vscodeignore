@@ -12,4 +12,8 @@ AGENTS.md
 vsc-extension-quickstart.md
 node_modules/**
 out/**
-*.vsix
+sample/**
+**/*.vsix
+**/*.png
+**/*.bmp
+!**/images/icon.png
