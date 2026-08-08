@@ -6,6 +6,7 @@ import path from 'path';
 describe('Webview find/replace widget', () => {
   const providerSource = fs.readFileSync(path.join(process.cwd(), 'src', 'CsvEditorProvider.ts'), 'utf8');
   const webviewSource = fs.readFileSync(path.join(process.cwd(), 'media', 'main.js'), 'utf8');
+  const stylesheet = fs.readFileSync(path.join(process.cwd(), 'media', 'editor.css'), 'utf8');
 
   it('renders two-row find/replace overlay controls', () => {
     assert.ok(providerSource.includes('id="findReplaceWidget"'));
@@ -21,6 +22,14 @@ describe('Webview find/replace widget', () => {
     assert.ok(providerSource.includes('id="findMenuButton"'));
     assert.ok(providerSource.includes('id="replaceOne"'));
     assert.ok(providerSource.includes('id="replaceAll"'));
+  });
+
+  it('keeps the widget hidden until opened and maps every bundled Codicon glyph', () => {
+    assert.match(stylesheet, /#findReplaceWidget\s*\{[\s\S]*display:\s*none/);
+    assert.match(stylesheet, /#findReplaceWidget\s*\{[\s\S]*position:\s*fixed/);
+    for (const icon of ['search', 'chevron-right', 'chevron-up', 'chevron-down', 'ellipsis', 'close', 'replace', 'replace-all']) {
+      assert.match(stylesheet, new RegExp(`\\.codicon-${icon}::before\\s*\\{\\s*content:`));
+    }
   });
 
   it('supports find and replace keyboard shortcuts', () => {
