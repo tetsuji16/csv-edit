@@ -30,6 +30,10 @@ describe('Webview find/replace widget', () => {
     for (const icon of ['search', 'chevron-right', 'chevron-up', 'chevron-down', 'ellipsis', 'close', 'replace', 'replace-all']) {
       assert.match(stylesheet, new RegExp(`\\.codicon-${icon}::before\\s*\\{\\s*content:`));
     }
+    assert.doesNotMatch(stylesheet, /content:\s*'\\\\[0-9a-f]+'/i, 'Codicon escapes must not render as literal text');
+    assert.ok(stylesheet.includes(String.raw`.codicon-replace::before { content: '\eb3d'; }`));
+    assert.ok(stylesheet.includes(String.raw`.codicon-replace-all::before { content: '\eb3c'; }`));
+    assert.match(providerSource, /font-src \$\{webview\.cspSource\}/, 'CSP must allow the bundled Codicon font');
   });
 
   it('supports find and replace keyboard shortcuts', () => {
