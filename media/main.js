@@ -2265,17 +2265,18 @@ const copySelectionToClipboard = () => {
   if (coords.length === 0) return;
   const minRow = Math.min(...coords.map(c => c.row)), maxRow = Math.max(...coords.map(c => c.row));
   const minCol = Math.min(...coords.map(c => c.col)), maxCol = Math.max(...coords.map(c => c.col));
-  let csv = '';
+  const rows = [];
   for(let r = minRow; r <= maxRow; r++){
     let rowVals = [];
     for(let c = minCol; c <= maxCol; c++){
       const selector = (hasHeader && r === 0 ? 'th' : 'td') + '[data-row="'+r+'"][data-col="'+c+'"]';
       const cell = table.querySelector(selector);
-      rowVals.push(cell ? cell.innerText : '');
+      const value = cell ? cell.textContent : '';
+      rowVals.push(/[\t\r\n"]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value);
     }
-    csv += rowVals.join(CSV_SEPARATOR) + '\n';
+    rows.push(rowVals.join('\t'));
   }
-  vscode.postMessage({ type: 'copyToClipboard', text: csv.trimEnd() });
+  vscode.postMessage({ type: 'copyToClipboard', text: rows.join('\n') });
 };
 
 window.addEventListener('message', event => {

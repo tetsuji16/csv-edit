@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.14 — 2026-10-10
+
+- Copy selected cells as escaped TSV, preserving multiline values, quotes, tabs, trailing empty cells, and whitespace.
+- Preserve record line endings when quoted cells contain a different newline style.
+- Keep cached document data intact when a bulk replacement cannot be applied.
+- Point uneven-row diagnostics to the first missing column.
+
+## 0.1.13
+
+- Fixed Codicon rendering in the CSV webview.
+
+## 0.1.12
+
+- Automated verified Marketplace publishing when the extension version changes on main.
+
 ## 0.1.11 — 2026-08-02
 
 - Kept the GitHub and Marketplace introduction consistently in English.

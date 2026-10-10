@@ -27,6 +27,7 @@ menu. Dense rows and restrained borders keep the available space focused on data
 - Open CSV, TSV, TAB, and PSV files directly in a grid
 - Edit cells, rectangular ranges, rows, and columns with mouse or keyboard
 - Copy and paste tabular data using the familiar TSV clipboard format
+  (copy preserves embedded tabs, newlines, quotes, empty cells, and trailing spaces)
 - Insert, delete, resize, and reorder rows and columns
 - Sort, filter, find, and replace values
 - Trim whitespace, change case, fill blanks, and remove empty or duplicate rows

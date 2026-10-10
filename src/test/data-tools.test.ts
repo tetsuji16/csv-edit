@@ -37,5 +37,6 @@ test('duplicate removal can exempt a header after hidden preamble rows', () => {
 
 test('validation finds ragged rows and header problems', () => {
   const issues = validateCsvRows([['', 'Name', 'name'], ['1', 'Alice']], true);
+  assert.equal(issues[0].col, 2);
   assert.deepEqual(issues.map(issue => issue.code), ['ragged-row', 'empty-header', 'duplicate-header']);
 });

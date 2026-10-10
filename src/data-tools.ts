@@ -93,7 +93,7 @@ export function validateCsvRows(rows: string[][], hasHeader: boolean): Validatio
         severity: 'warning',
         code: 'ragged-row',
         row: index,
-        col: Math.max(0, row.length - 1),
+        col: row.length,
         message: `Row ${index + 1} has ${row.length} columns; expected ${width}.`
       });
     }

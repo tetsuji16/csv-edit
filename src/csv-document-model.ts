@@ -30,7 +30,7 @@ export class CsvDocumentModel {
       rows: result.data.map(row => row.map(value => String(value ?? ''))),
       errors: result.errors,
       delimiter,
-      lineEnding: content.includes('\r\n') ? '\r\n' : content.includes('\r') ? '\r' : '\n',
+      lineEnding: result.meta.linebreak as CsvSnapshot['lineEnding'],
       hasBom
     };
     this.cached = { version, delimiter, snapshot };

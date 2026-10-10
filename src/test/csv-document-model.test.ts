@@ -32,3 +32,13 @@ test('cache is keyed by version+delimiter and does not retain document text', ()
   const cached = (model as unknown as { cached?: { text?: unknown } }).cached;
   assert.ok(cached && !('text' in cached), 'cached snapshot must not retain document text');
 });
+
+for (const ending of ['\n', '\r', '\r\n']) {
+  test(`detects record endings independently of quoted cell newlines (${JSON.stringify(ending)})`, () => {
+    const model = new CsvDocumentModel();
+    const text = '"a\r\nb",c' + ending + '1,2';
+    const snapshot = model.read(1, text, ',');
+    assert.equal(snapshot.lineEnding, ending);
+    assert.equal(model.serialize(snapshot.rows, snapshot), text);
+  });
+}

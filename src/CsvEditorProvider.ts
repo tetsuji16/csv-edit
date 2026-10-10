@@ -644,9 +644,8 @@ class CsvEditorController {
     try {
       const separator = this.getSeparator();
       const oldText = this.document.getText();
-      // Reuse the cached parse snapshot; replaceCells only reads coordinates and
-      // pushes updates, so the cached rows can be shared without copying.
-      const data = this.documentModel.read(this.document.version, oldText, separator).rows;
+      // Stage replacements separately so a rejected edit cannot corrupt the cache.
+      const data = this.documentModel.read(this.document.version, oldText, separator).rows.map(row => row.slice());
       const updates: Array<{ row: number; col: number; value: string }> = [];
 
       let changed = false;
