@@ -2269,9 +2269,13 @@ const copySelectionToClipboard = () => {
   const minCol = Math.min(...coords.map(c => c.col)), maxCol = Math.max(...coords.map(c => c.col));
   const rows = [];
   for(let r = minRow; r <= maxRow; r++){
+    const tag = hasHeader && r === 0 ? 'th' : 'td';
+    // Like spreadsheets, skip rows hidden by the quick filter.
+    const rowEl = table.querySelector(tag + '[data-row="'+r+'"]')?.closest?.('tr');
+    if (rowEl && rowEl.style.display === 'none') continue;
     let rowVals = [];
     for(let c = minCol; c <= maxCol; c++){
-      const selector = (hasHeader && r === 0 ? 'th' : 'td') + '[data-row="'+r+'"][data-col="'+c+'"]';
+      const selector = tag + '[data-row="'+r+'"][data-col="'+c+'"]';
       const cell = table.querySelector(selector);
       const value = cell ? cell.textContent : '';
       rowVals.push(/[\t\r\n"]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value);

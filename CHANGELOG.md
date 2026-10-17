@@ -4,6 +4,7 @@
 
 - Always parse pasted clipboard text as TSV so values containing commas or semicolons are no longer split across cells.
 - Keep newlines when cancelling a cell edit with Escape, and show exact multiline/whitespace header values in the formula bar.
+- Exclude rows hidden by the quick filter when copying a selection.
 
 ## 0.1.14 — 2026-10-10
 
