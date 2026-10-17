@@ -79,7 +79,8 @@ const syncFormulaBar = () => {
   const row = Number.parseInt(active.getAttribute('data-row') || '0', 10);
   const col = Number.parseInt(active.getAttribute('data-col') || '0', 10);
   formulaTarget = { row, col, cell: active };
-  formulaOriginalValue = active.innerText || '';
+  // textContent keeps newlines/spaces that innerText collapses in nowrap headers.
+  formulaOriginalValue = active.textContent || '';
   if (formulaNameBox) formulaNameBox.value = `R${row + 1}:C${col + 1}`;
   if (formulaInput && document.activeElement !== formulaInput) {
     formulaInput.value = formulaOriginalValue;
@@ -2047,7 +2048,8 @@ document.addEventListener('keydown', e => {
     }
   }
   if (editingCell && e.key === 'Escape') {
-    e.preventDefault(); editingCell.innerText = originalCellValue; editingCell.blur();
+    // textContent (not innerText) so newlines are restored as text, not <br>.
+    e.preventDefault(); editingCell.textContent = originalCellValue; editingCell.blur();
   }
   if (!editingCell && e.key === 'Escape') {
     clearSelection();

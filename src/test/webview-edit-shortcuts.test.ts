@@ -28,6 +28,14 @@ describe('Webview edit shortcuts', () => {
     assert.ok(webviewSource.includes("const value = cell.textContent;"));
   });
 
+  it('reads and restores cell values with textContent so newlines survive', () => {
+    // innerText collapses whitespace in nowrap headers and its setter turns
+    // newlines into <br>, which textContent then drops on blur.
+    assert.ok(!/\.innerText\s*=\s*originalCellValue/.test(webviewSource));
+    assert.ok(webviewSource.includes('editingCell.textContent = originalCellValue;'));
+    assert.ok(webviewSource.includes("formulaOriginalValue = active.textContent || '';"));
+  });
+
   it('keeps non-edit Tab navigation in sync with selection state', () => {
     assert.ok(webviewSource.includes("if (!editingCell && e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {"));
     assert.ok(webviewSource.includes('const nextCell = ensureRenderedCellByCoords(targetRow, targetCol);'));
