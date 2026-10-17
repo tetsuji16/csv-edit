@@ -10,14 +10,14 @@ describe('Webview edit shortcuts', () => {
     assert.ok(webviewSource.includes('const insertNewlineAtCaret = cell => {'));
     assert.ok(webviewSource.includes("const NEWLINE_SENTINEL_ATTR = 'data-csv-newline-sentinel';"));
     assert.ok(webviewSource.includes("if (editingCell && e.key === 'Enter') {"));
-    assert.ok(webviewSource.includes('if (e.shiftKey) {'));
+    assert.ok(webviewSource.includes('if (e.shiftKey || e.altKey) {'));
     assert.ok(webviewSource.includes('insertNewlineAtCaret(editingCell)'));
     assert.ok(webviewSource.includes('appendVisibleNewlineAtEnd(editingCell)'));
   });
 
   it('supports Shift+Enter from selection on first press', () => {
     assert.ok(webviewSource.includes('if (!editingCell && anchorCell && currentSelection.length === 1) {'));
-    assert.ok(webviewSource.includes('if (e.shiftKey) {'));
+    assert.ok(webviewSource.includes("if (e.key === 'Enter' && e.shiftKey) {"));
     assert.ok(webviewSource.includes('Shift+Enter from selection should open detail edit and insert'));
     assert.ok(webviewSource.includes('appendVisibleNewlineAtEnd(cell);'));
   });

@@ -19,7 +19,9 @@ describe('Webview find/replace widget', () => {
     assert.ok(providerSource.includes('id="replaceCaseToggle"'));
     assert.ok(providerSource.includes('id="findPrev"'));
     assert.ok(providerSource.includes('id="findNext"'));
-    assert.ok(providerSource.includes('id="findMenuButton"'));
+    // The old overflow menu only held non-functional items; it must stay gone.
+    assert.ok(!providerSource.includes('id="findMenuButton"'));
+    assert.ok(!providerSource.includes('findOverflowDiacritics'));
     assert.ok(providerSource.includes('id="replaceOne"'));
     assert.ok(providerSource.includes('id="replaceAll"'));
   });
@@ -42,7 +44,7 @@ describe('Webview find/replace widget', () => {
     assert.ok(webviewSource.includes("e.key === 'F3'"));
     assert.ok(webviewSource.includes('openFindReplace(false);'));
     assert.ok(webviewSource.includes('openFindReplace(true);'));
-    assert.ok(webviewSource.includes('if (findReplaceState.open && e.key === \'Escape\') {'));
+    assert.ok(webviewSource.includes('if (findReplaceState.open) { e.preventDefault(); closeFindReplace(); return; }'));
     assert.ok(webviewSource.includes('if (e.key === \'Enter\') {'));
   });
 

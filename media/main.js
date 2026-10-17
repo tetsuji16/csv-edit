@@ -6,6 +6,10 @@ try { document.body.focus({ preventScroll: true }); } catch { try { document.bod
 const vscode = acquireVsCodeApi();
 
 const root = document.getElementById('csv-root');
+// Localized UI strings serialized by the extension (see src/webview-i18n.ts).
+let STRINGS = {};
+try { STRINGS = JSON.parse(document.getElementById('__csvStrings')?.textContent || '{}'); } catch { STRINGS = {}; }
+const t = (key, vars = {}) => String(STRINGS[key] ?? key).replace(/\{(\w+)\}/g, (match, name) => (name in vars ? String(vars[name]) : match));
 const CSV_SEPARATOR = String.fromCodePoint(parseInt(root?.dataset?.sepcode || '44', 10)); // default ','
 const parsePositiveNumber = value => {
   const parsed = typeof value === 'string' ? Number.parseFloat(value) : Number(value);
@@ -24,7 +28,6 @@ const ZOOM_MAX = 3.0;
 let zoomScale = 1;
 const getMinRowHeight = () => Math.max(22, Math.round(BASE_FONT_SIZE_PX * zoomScale * 1.6));
 
-let lastContextIsHeader = false;   // remembers whether we right-clicked a <th>
 let isUpdating = false, isSelecting = false, anchorCell = null, rangeEndCell = null, currentSelection = [];
 let startCell = null, endCell = null, selectionMode = "cell";
 let sheetColumnAnchor = null;
@@ -42,37 +45,100 @@ const table = document.querySelector('#csv-root table');
 const scrollContainer = document.querySelector('.table-container');
 const csvPanel = document.getElementById('csvPanel');
 const csvPanelTitle = document.getElementById('csvPanelTitle');
-const panelResults = document.getElementById('panelResults');
-const dataToolActions = document.getElementById('dataToolActions');
+const panelBody = document.getElementById('panelBody');
 const selectionStatus = document.getElementById('selectionStatus');
+const aggregateStatus = document.getElementById('aggregateStatus');
 const sizeStatus = document.getElementById('sizeStatus');
 const visibleStatus = document.getElementById('visibleStatus');
+const toastStatus = document.getElementById('toastStatus');
 const zoomStatus = document.getElementById('zoomStatus');
 const formulaNameBox = document.getElementById('formulaNameBox');
 const formulaInput = document.getElementById('formulaInput');
 const formulaApply = document.getElementById('formulaApply');
 const formulaCancel = document.getElementById('formulaCancel');
+const filterButton = document.getElementById('toolbarFilter');
+const formulaMore = document.getElementById('formulaMore');
+const updateFormulaMore = () => {
+  if (!formulaMore || !formulaInput) return;
+  const extra = formulaInput.value.split('\n').length - 1;
+  formulaMore.textContent = extra > 0 && !formulaInput.classList.contains('expanded') ? `+${extra}` : '';
+};
+// Grow the value bar over the grid while editing a multi-line value.
+const expandFormulaInput = () => {
+  if (!formulaInput) return;
+  formulaInput.classList.add('expanded');
+  formulaInput.style.height = 'auto';
+  formulaInput.style.height = `${Math.min(formulaInput.scrollHeight + 2, Math.round(window.innerHeight * 0.4))}px`;
+  updateFormulaMore();
+};
+const collapseFormulaInput = () => {
+  if (!formulaInput) return;
+  formulaInput.classList.remove('expanded');
+  formulaInput.style.height = '';
+  updateFormulaMore();
+};
 let formulaTarget = null;
 let formulaOriginalValue = '';
 let formulaDirty = false;
 
-const getActiveDataCell = () => {
-  const candidates = [anchorCell, ...currentSelection];
-  return candidates.find(cell => {
-    if (!cell?.getAttribute) return false;
-    const row = Number.parseInt(cell.getAttribute('data-row') || '', 10);
-    const col = Number.parseInt(cell.getAttribute('data-col') || '', 10);
-    return Number.isInteger(row) && Number.isInteger(col) && col >= 0;
-  }) || null;
+const DATA_ROW_COUNT = Number.parseInt(root?.dataset?.datarowcount || '0', 10) || 0;
+const COLUMN_COUNT = Number.parseInt(root?.dataset?.columncount || '0', 10) || 0;
+// Absolute document row of the first body (non-header) row. Cell addresses and
+// navigation use it so the UI numbers rows exactly like the row-number column.
+const HEADER_ROW = (() => {
+  const th = table?.querySelector('thead th[data-row]');
+  return th ? Number.parseInt(th.getAttribute('data-row') || '', 10) : null;
+})();
+const FIRST_BODY_ROW = (() => {
+  if (Number.isInteger(HEADER_ROW)) return HEADER_ROW + 1;
+  const td = table?.querySelector('tbody td[data-row]');
+  return td ? Number.parseInt(td.getAttribute('data-row') || '0', 10) : 0;
+})();
+const LAST_BODY_ROW = FIRST_BODY_ROW + Math.max(0, DATA_ROW_COUNT - 1);
+
+// UI state that must survive the full re-render after structural edits.
+const readUiState = () => {
+  try { return (vscode.getState() || {}).ui || {}; } catch { return {}; }
 };
+const writeUiState = patch => {
+  try {
+    const st = vscode.getState() || {};
+    vscode.setState({ ...st, ui: { ...(st.ui || {}), ...patch } });
+  } catch {}
+};
+
+let toastTimer = null;
+const showToast = message => {
+  if (!toastStatus) return;
+  toastStatus.textContent = message;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastStatus.textContent = ''; }, 2500);
+};
+
+const isDataCell = cell => {
+  if (!cell?.getAttribute) return false;
+  const row = Number.parseInt(cell.getAttribute('data-row') || '', 10);
+  const col = Number.parseInt(cell.getAttribute('data-col') || '', 10);
+  return Number.isInteger(row) && Number.isInteger(col) && col >= 0;
+};
+
+const getActiveDataCell = () => [anchorCell, ...currentSelection].find(isDataCell) || null;
+
+const getColumnName = col => {
+  const th = table?.querySelector(`thead th[data-col="${col}"]`);
+  const name = th ? (th.textContent || '').trim() : '';
+  return name || `#${col + 1}`;
+};
+const getRowLabel = row => (row === HEADER_ROW ? t('header') : String(row - FIRST_BODY_ROW + 1));
 
 const syncFormulaBar = () => {
   const active = getActiveDataCell();
   table?.querySelectorAll('.active-cell').forEach(cell => cell.classList.remove('active-cell'));
   if (!active) {
     formulaTarget = null;
-    if (formulaNameBox) formulaNameBox.value = currentSelection.length ? `${currentSelection.length} cells` : '';
+    if (formulaNameBox && document.activeElement !== formulaNameBox) formulaNameBox.value = '';
     if (formulaInput && document.activeElement !== formulaInput) formulaInput.value = '';
+    updateFormulaMore();
     return;
   }
   active.classList.add('active-cell');
@@ -81,32 +147,60 @@ const syncFormulaBar = () => {
   formulaTarget = { row, col, cell: active };
   // textContent keeps newlines/spaces that innerText collapses in nowrap headers.
   formulaOriginalValue = active.textContent || '';
-  if (formulaNameBox) formulaNameBox.value = `R${row + 1}:C${col + 1}`;
+  if (formulaNameBox && document.activeElement !== formulaNameBox) {
+    formulaNameBox.value = `${getRowLabel(row)} · ${getColumnName(col)}`;
+  }
   if (formulaInput && document.activeElement !== formulaInput) {
     formulaInput.value = formulaOriginalValue;
     formulaDirty = false;
   }
+  updateFormulaMore();
 };
 
-const setPanelOpen = (open, title = 'Data tools') => {
-  if (!csvPanel) return;
-  csvPanelTitle.textContent = title;
-  csvPanel.classList.toggle('open', open);
+// Sum / average / count of numeric values in the (rendered) selection.
+const parseNumericCell = text => {
+  const value = String(text || '').trim().replace(/,(?=\d{3}(\D|$))/g, '');
+  if (!value || !/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?%?$/i.test(value)) return null;
+  const num = Number.parseFloat(value);
+  return Number.isFinite(num) ? num : null;
+};
+const formatAggregate = value => {
+  if (!Number.isFinite(value)) return '';
+  const rounded = Math.round(value * 1e6) / 1e6;
+  return rounded.toLocaleString(undefined, { maximumFractionDigits: 4 });
+};
+const updateAggregates = () => {
+  if (!aggregateStatus) return;
+  const cells = currentSelection.filter(cell => isDataCell(cell) && cell.tagName !== 'TH' && cell.closest('tr')?.style.display !== 'none');
+  if (cells.length < 2 || cells.length > 200000) {
+    aggregateStatus.textContent = '';
+    return;
+  }
+  let sum = 0;
+  let count = 0;
+  for (const cell of cells) {
+    const num = parseNumericCell(cell.textContent);
+    if (num === null) continue;
+    sum += num;
+    count++;
+  }
+  aggregateStatus.textContent = count
+    ? `${t('sum')} ${formatAggregate(sum)}  ${t('average')} ${formatAggregate(sum / count)}  ${t('count')} ${count}`
+    : '';
 };
 
 const updateModernStatus = () => {
   syncFormulaBar();
   if (selectionStatus) {
-    const address = formulaNameBox?.value || '';
-    selectionStatus.textContent = currentSelection.length
-      ? `${address}${address ? '  ·  ' : ''}${currentSelection.length} selected`
-      : 'No selection';
+    const active = getActiveDataCell();
+    const address = active ? `${getRowLabel(Number(active.getAttribute('data-row')))} · ${getColumnName(Number(active.getAttribute('data-col')))}` : '';
+    const count = currentSelection.filter(isDataCell).length;
+    selectionStatus.textContent = count > 1
+      ? `${address}${address ? '  ·  ' : ''}${t('selectedCount', { n: count })}`
+      : (address || t('noSelection'));
   }
-  if (sizeStatus) {
-    const rows = Number.parseInt(root?.dataset?.rowcount || '0', 10);
-    const cols = Number.parseInt(root?.dataset?.columncount || '0', 10);
-    sizeStatus.textContent = `${rows} rows · ${cols} columns`;
-  }
+  updateAggregates();
+  if (sizeStatus) sizeStatus.textContent = t('rowsColumns', { rows: DATA_ROW_COUNT, cols: COLUMN_COUNT });
   if (zoomStatus) zoomStatus.textContent = `${Math.round(zoomScale * 100)}%`;
 };
 let statusUpdateQueued = false;
@@ -119,97 +213,374 @@ const queueModernStatusUpdate = () => {
   });
 };
 
-document.getElementById('viewTextButton')?.addEventListener('click', () => vscode.postMessage({ type: 'openTextView' }));
-document.getElementById('undoButton')?.addEventListener('click', () => vscode.postMessage({ type: 'undo' }));
-document.getElementById('redoButton')?.addEventListener('click', () => vscode.postMessage({ type: 'redo' }));
-document.getElementById('toolbarFind')?.addEventListener('click', () => openFindReplace(false));
-document.getElementById('toolbarTools')?.addEventListener('click', () => {
-  if (dataToolActions) dataToolActions.style.display = 'grid';
-  if (panelResults) panelResults.innerHTML = '';
-  setPanelOpen(true, 'Data tools / データツール');
-});
-document.getElementById('toolbarValidate')?.addEventListener('click', () => {
-  if (dataToolActions) dataToolActions.style.display = 'none';
-  if (panelResults) panelResults.textContent = 'Validating…';
-  setPanelOpen(true, 'Validation / 検証');
-  vscode.postMessage({ type: 'validateData' });
-});
-document.getElementById('toolbarTheme')?.addEventListener('click', () => vscode.postMessage({ type: 'cycleTheme' }));
-document.getElementById('csvPanelClose')?.addEventListener('click', () => setPanelOpen(false));
-const commandOverflow = document.getElementById('commandOverflow');
-commandOverflow?.addEventListener('click', event => {
-  if (event.target.closest('button')) commandOverflow.open = false;
-});
-document.getElementById('ribbonCopy')?.addEventListener('click', () => copySelectionToClipboard());
-document.getElementById('ribbonZoomOut')?.addEventListener('click', () => zoomOut());
-document.getElementById('ribbonZoomReset')?.addEventListener('click', () => resetZoom());
-document.getElementById('ribbonZoomIn')?.addEventListener('click', () => zoomIn());
-document.getElementById('ribbonAddRow')?.addEventListener('click', () => {
-  const active = getActiveDataCell();
-  if (!active) return;
-  const row = Number.parseInt(active.getAttribute('data-row') || '0', 10);
-  vscode.postMessage({ type: 'insertRows', index: row + 1, count: 1 });
-});
-document.getElementById('ribbonAddColumn')?.addEventListener('click', () => {
-  const active = getActiveDataCell();
-  if (!active) return;
-  const col = Number.parseInt(active.getAttribute('data-col') || '0', 10);
-  vscode.postMessage({ type: 'insertColumns', index: col + 1, count: 1 });
-});
-document.getElementById('ribbonDeleteRow')?.addEventListener('click', () => {
-  const active = getActiveDataCell();
-  if (!active) return;
-  const row = Number.parseInt(active.getAttribute('data-row') || '0', 10);
-  vscode.postMessage({ type: 'deleteRow', index: row });
-});
-document.getElementById('ribbonDeleteColumn')?.addEventListener('click', () => {
-  const active = getActiveDataCell();
-  if (!active) return;
-  const col = Number.parseInt(active.getAttribute('data-col') || '0', 10);
-  vscode.postMessage({ type: 'deleteColumn', index: col });
-});
-document.getElementById('toolbarFilter')?.addEventListener('click', () => {
-  if (dataToolActions) dataToolActions.style.display = 'none';
-  setPanelOpen(true, 'Filter / フィルター');
-  if (panelResults) {
-    panelResults.innerHTML = '<p><input id="quickFilterInput" type="search" placeholder="Contains…" aria-label="Filter rows" style="width:100%;box-sizing:border-box;padding:8px"></p><p id="quickFilterCount"></p>';
-    const input = document.getElementById('quickFilterInput');
-    if (input) input.value = quickFilterQuery;
-    input?.addEventListener('input', () => {
-      quickFilterQuery = input.value;
-      applyQuickFilter();
-    });
-    input?.focus();
+// ───────── Selection helpers shared by toolbar and context menu ─────────
+// selectionKind distinguishes whole-row/whole-column selections from
+// rectangles so row/column commands target what the user selected.
+let selectionKind = 'cells';
+const uniqueSorted = values => Array.from(new Set(values)).sort((a, b) => a - b);
+const getSelectionRows = () => uniqueSorted(currentSelection
+  .map(cell => Number.parseInt(cell.getAttribute?.('data-row') || 'NaN', 10))
+  .filter(n => Number.isInteger(n) && n >= 0));
+const getSelectionCols = () => uniqueSorted(currentSelection
+  .map(cell => Number.parseInt(cell.getAttribute?.('data-col') || 'NaN', 10))
+  .filter(n => Number.isInteger(n) && n >= 0));
+const getTargetRows = fallbackRow => {
+  if (selectionKind === 'columns' || selectionKind === 'all') {
+    return Number.isInteger(fallbackRow) && fallbackRow >= 0 ? [fallbackRow] : [];
+  }
+  const rows = getSelectionRows();
+  if (Number.isInteger(fallbackRow) && fallbackRow >= 0 && !rows.includes(fallbackRow)) return [fallbackRow];
+  return rows;
+};
+const getTargetCols = fallbackCol => {
+  if (selectionKind === 'rows' || selectionKind === 'all') {
+    return Number.isInteger(fallbackCol) && fallbackCol >= 0 ? [fallbackCol] : [];
+  }
+  const cols = getSelectionCols();
+  if (Number.isInteger(fallbackCol) && fallbackCol >= 0 && !cols.includes(fallbackCol)) return [fallbackCol];
+  return cols;
+};
+const postInsertRows = (rows, below) => {
+  if (!rows.length) {
+    vscode.postMessage({ type: 'insertRows', index: LAST_BODY_ROW + (DATA_ROW_COUNT ? 1 : 0), count: 1 });
+    return;
+  }
+  const index = below ? rows[rows.length - 1] + 1 : rows[0];
+  vscode.postMessage({ type: 'insertRows', index, count: rows.length });
+};
+const postInsertCols = (cols, right) => {
+  if (!cols.length) {
+    vscode.postMessage({ type: 'insertColumns', index: COLUMN_COUNT, count: 1 });
+    return;
+  }
+  const index = right ? cols[cols.length - 1] + 1 : cols[0];
+  vscode.postMessage({ type: 'insertColumns', index, count: cols.length });
+};
+const postDeleteRows = rows => {
+  if (!rows.length) return;
+  if (rows.length === 1) vscode.postMessage({ type: 'deleteRow', index: rows[0] });
+  else vscode.postMessage({ type: 'deleteRows', indices: rows });
+};
+const postDeleteCols = cols => {
+  if (!cols.length) return;
+  if (cols.length === 1) vscode.postMessage({ type: 'deleteColumn', index: cols[0] });
+  else vscode.postMessage({ type: 'deleteColumns', indices: cols });
+};
+
+// ───────── Side panel (filter / clean & transform / validation) ─────────
+let activePanel = null;
+const el = (tag, props = {}, children = []) => {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key === 'text') node.textContent = value;
+    else if (key === 'class') node.className = value;
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  children.forEach(child => child && node.appendChild(child));
+  return node;
+};
+const closePanel = () => {
+  if (!csvPanel) return;
+  csvPanel.classList.remove('open');
+  document.body.classList.remove('panel-open');
+  activePanel = null;
+  writeUiState({ panel: null });
+  const focusTarget = anchorCell && anchorCell.isConnected ? anchorCell : document.body;
+  try { focusTarget.focus({ preventScroll: true }); } catch {}
+};
+const openPanel = (kind, title) => {
+  if (!csvPanel || !panelBody) return;
+  activePanel = kind;
+  csvPanelTitle.textContent = title;
+  panelBody.replaceChildren();
+  csvPanel.classList.add('open');
+  document.body.classList.add('panel-open');
+  writeUiState({ panel: kind });
+};
+document.getElementById('csvPanelClose')?.addEventListener('click', closePanel);
+csvPanel?.addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closePanel();
   }
 });
 
-// Quick filter state. Matching uses data cells only (not the serial index) so
-// the extension-side "copy all" can apply the same rule to unloaded rows.
-let quickFilterQuery = '';
+// Quick filter. Matching uses data cells only (not the serial index) so the
+// extension-side "copy all" can apply the same rule to unloaded rows.
+let quickFilterQuery = String(readUiState().filter || '');
+const countLoadedBodyRows = () => table.querySelectorAll('tbody tr').length;
 const applyQuickFilter = () => {
   const query = quickFilterQuery.toLocaleLowerCase();
   let shown = 0;
+  let total = 0;
   table.querySelectorAll('tbody tr').forEach(row => {
-    const text = Array.from(row.querySelectorAll('td[data-col]'))
-      .filter(cell => cell.getAttribute('data-col') !== '-1')
-      .map(cell => cell.textContent)
-      .join('');
-    const visible = !query || text.toLocaleLowerCase().includes(query);
+    const cells = Array.from(row.querySelectorAll('td[data-col]')).filter(cell => cell.getAttribute('data-col') !== '-1');
+    const text = cells.map(cell => cell.textContent).join('');
+    const isVirtual = cells.every(cell => Number(cell.getAttribute('data-row')) > LAST_BODY_ROW || !DATA_ROW_COUNT);
+    if (!isVirtual) total++;
+    // The trailing virtual row stays visible only while no filter is active.
+    const visible = !query || (!isVirtual && text.toLocaleLowerCase().includes(query));
     row.style.display = visible ? '' : 'none';
     if (visible) shown++;
   });
   const count = document.getElementById('quickFilterCount');
-  if (count) count.textContent = `${shown} visible rows`;
-  if (visibleStatus) visibleStatus.textContent = query ? `${shown} visible` : '';
+  if (count) count.textContent = t('filterCount', { shown, total });
+  if (visibleStatus) visibleStatus.textContent = query ? t('visibleRows', { n: shown }) : '';
+  filterButton?.setAttribute('aria-pressed', query ? 'true' : 'false');
   updateModernStatus();
+};
+const setQuickFilter = value => {
+  quickFilterQuery = value;
+  writeUiState({ filter: value });
+  applyQuickFilter();
 };
 // Rows appended by chunk loading must honour an active filter too.
 window.addEventListener('csvChunkLoaded', () => { if (quickFilterQuery) applyQuickFilter(); });
 
+const showFilterPanel = (focus = true) => {
+  openPanel('filter', t('filterPanel'));
+  const input = el('input', { id: 'quickFilterInput', type: 'search', placeholder: t('filterPlaceholder'), 'aria-label': t('filterPanel') });
+  input.value = quickFilterQuery;
+  let debounce = null;
+  input.addEventListener('input', () => {
+    if (debounce) clearTimeout(debounce);
+    debounce = setTimeout(() => setQuickFilter(input.value), 120);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (debounce) clearTimeout(debounce);
+      setQuickFilter(input.value);
+    }
+  });
+  panelBody.append(
+    el('p', {}, [input]),
+    el('p', { id: 'quickFilterCount', class: 'panel-hint' }),
+    el('p', { class: 'panel-hint', text: t('filterHint') }),
+    el('div', { class: 'button-row' }, [
+      el('button', { type: 'button', class: 'secondary-button', text: t('filterClear'), onclick: () => { input.value = ''; setQuickFilter(''); input.focus(); } })
+    ])
+  );
+  applyQuickFilter();
+  if (focus) {
+    try { input.focus(); input.select(); } catch {}
+  }
+};
+
+// Clean & transform: choose a tool, preview the effect, then apply.
+const DATA_TOOLS = [
+  ['trim', 'toolTrim'],
+  ['uppercase', 'toolUppercase'],
+  ['lowercase', 'toolLowercase'],
+  ['fillEmpty', 'toolFillEmpty'],
+  ['removeEmptyRows', 'toolRemoveEmptyRows'],
+  ['removeDuplicates', 'toolRemoveDuplicates']
+];
+let pendingToolRequest = null;
+const showToolsPanel = (notice = '') => {
+  openPanel('tools', t('toolsPanel'));
+  pendingToolRequest = null;
+  const selectedCols = selectionKind === 'all' ? [] : getSelectionCols();
+  const scope = el('select', { id: 'toolScope', 'aria-label': t('toolScope') }, [
+    el('option', { value: 'all', text: t('scopeAll') }),
+    selectedCols.length && selectedCols.length < COLUMN_COUNT
+      ? el('option', { value: 'selected', text: t('scopeSelected', { cols: selectedCols.map(getColumnName).join(', ') }) })
+      : null
+  ]);
+  // Default to the selection only when the user deliberately selected a
+  // column or a range; a single active cell keeps the whole-table default.
+  const deliberate = selectionKind === 'columns' || currentSelection.filter(isDataCell).length > 1;
+  if (deliberate && selectedCols.length && selectedCols.length < COLUMN_COUNT) scope.value = 'selected';
+  const fillInput = el('input', { id: 'fillValueInput', type: 'text', placeholder: t('fillValue'), 'aria-label': t('fillValue') });
+  const fillField = el('div', {}, [
+    el('label', { class: 'panel-field' }, [el('span', { text: t('fillValue') }), fillInput]),
+    el('div', { class: 'button-row' }, [
+      el('button', { type: 'button', class: 'secondary-button', text: t('preview'), onclick: () => requestPreview() })
+    ])
+  ]);
+  fillField.style.display = 'none';
+  const result = el('div', { id: 'toolResult', 'aria-live': 'polite' });
+  if (notice) result.append(el('p', { class: 'status-ok', text: notice }));
+  let action = null;
+  const buttons = DATA_TOOLS.map(([id, label]) => el('button', {
+    type: 'button',
+    'data-tool': id,
+    'aria-pressed': 'false',
+    text: t(label),
+    onclick: () => {
+      action = id;
+      buttons.forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === id ? 'true' : 'false'));
+      fillField.style.display = id === 'fillEmpty' ? '' : 'none';
+      if (id === 'fillEmpty') {
+        result.replaceChildren();
+        fillInput.focus();
+        return;
+      }
+      requestPreview();
+    }
+  }));
+  const requestPreview = () => {
+    if (!action) return;
+    const request = { action };
+    if (scope.value === 'selected') request.columns = selectedCols;
+    if (action === 'fillEmpty') request.value = fillInput.value;
+    pendingToolRequest = request;
+    result.replaceChildren(el('p', { class: 'panel-hint', text: t('previewing') }));
+    vscode.postMessage({ type: 'previewDataTool', request });
+  };
+  scope.addEventListener('change', requestPreview);
+  fillInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); requestPreview(); }
+  });
+  fillInput.addEventListener('input', () => { if (action === 'fillEmpty') result.replaceChildren(); });
+  panelBody.append(
+    el('p', { class: 'panel-hint', text: t('toolsIntro') }),
+    el('label', { class: 'panel-field' }, [el('span', { text: t('toolScope') }), scope]),
+    el('div', { class: 'tool-list', role: 'group' }, buttons),
+    fillField,
+    result
+  );
+  buttons[0]?.focus();
+};
+const renderToolPreview = message => {
+  const result = document.getElementById('toolResult');
+  if (!result || activePanel !== 'tools') return;
+  const changed = Number(message.changedCells) || 0;
+  const removed = Number(message.removedRows) || 0;
+  result.replaceChildren();
+  if (!changed && !removed) {
+    result.append(el('p', { text: t('previewNothing') }));
+    return;
+  }
+  result.append(el('p', { text: t('previewSummary', { cells: changed, rows: removed }) }));
+  const samples = Array.isArray(message.samples) ? message.samples : [];
+  if (samples.length) {
+    const list = el('ul', { class: 'preview-list' });
+    samples.forEach(sample => {
+      const row = Number(sample.row);
+      const col = Number(sample.col);
+      list.append(el('li', {}, [
+        el('span', { class: 'cell-ref', text: `${getRowLabel(row)} · ${getColumnName(col)}` }),
+        el('del', { text: String(sample.before ?? '') || '∅' }),
+        document.createTextNode(' → '),
+        el('ins', { text: String(sample.after ?? '') || '∅' })
+      ]));
+    });
+    if (changed > samples.length) list.append(el('li', { class: 'panel-hint', text: t('previewMore', { n: changed - samples.length }) }));
+    result.append(list);
+  }
+  const request = message.request || pendingToolRequest;
+  result.append(el('div', { class: 'button-row' }, [
+    el('button', {
+      type: 'button',
+      class: 'primary-button',
+      text: t('apply'),
+      onclick: () => {
+        writeUiState({ notice: t('applied') });
+        vscode.postMessage({ type: 'applyDataTool', request });
+      }
+    }),
+    el('button', { type: 'button', class: 'secondary-button', text: t('cancel'), onclick: () => result.replaceChildren() })
+  ]));
+};
+
+// Validation: list issues; clicking one selects the offending cell.
+const showValidatePanel = () => {
+  openPanel('validate', t('validatePanel'));
+  panelBody.append(el('p', { class: 'panel-hint', text: t('validating') }));
+  vscode.postMessage({ type: 'validateData' });
+};
+const describeIssue = issue => {
+  const row = Number(issue.row);
+  const col = Number(issue.col);
+  if (issue.code === 'ragged-row') {
+    const label = row === HEADER_ROW ? t('headerRowLabel') : t('rowLabel', { n: row - FIRST_BODY_ROW + 1 });
+    return t('issueRagged', { row: label, actual: issue.actual ?? '?', expected: issue.expected ?? '?' });
+  }
+  if (issue.code === 'empty-header') return t('issueEmptyHeader', { col: col + 1 });
+  if (issue.code === 'duplicate-header') return t('issueDuplicateHeader', { name: issue.name ?? '', col: col + 1 });
+  return String(issue.message || '');
+};
+const renderValidation = issues => {
+  if (activePanel !== 'validate' || !panelBody) return;
+  panelBody.replaceChildren();
+  if (!issues.length) {
+    panelBody.append(el('p', { class: 'status-ok', text: t('validationOk') }));
+  } else {
+    panelBody.append(el('p', { text: t('validationIssues', { n: issues.length }) }));
+    const list = el('ul', { class: 'issue-list' });
+    issues.slice(0, 500).forEach(issue => {
+      list.append(el('li', {}, [el('button', {
+        type: 'button',
+        text: describeIssue(issue),
+        onclick: () => {
+          const row = Number(issue.row);
+          const col = Math.max(0, Math.min(Number(issue.col), COLUMN_COUNT - 1));
+          const cell = ensureRenderedCellByCoords(row, col);
+          if (cell) {
+            setSingleSelection(cell);
+            updateModernStatus();
+          }
+        }
+      })]));
+    });
+    if (issues.length > 500) list.append(el('li', { class: 'panel-hint', text: t('previewMore', { n: issues.length - 500 }) }));
+    panelBody.append(list);
+  }
+  panelBody.append(el('div', { class: 'button-row' }, [
+    el('button', { type: 'button', class: 'secondary-button', text: t('revalidate'), onclick: showValidatePanel })
+  ]));
+};
+
+// ───────── Command bar ─────────
+const commandOverflow = document.getElementById('commandOverflow');
+const closeOverflow = () => { if (commandOverflow) commandOverflow.open = false; };
+commandOverflow?.addEventListener('click', event => {
+  if (event.target.closest('.command-menu button')) closeOverflow();
+});
+commandOverflow?.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.stopPropagation();
+    closeOverflow();
+    commandOverflow.querySelector('summary')?.focus();
+  }
+});
+document.addEventListener('mousedown', event => {
+  if (commandOverflow?.open && !event.target.closest?.('#commandOverflow')) closeOverflow();
+});
+const onClick = (id, handler) => document.getElementById(id)?.addEventListener('click', handler);
+onClick('viewTextButton', () => vscode.postMessage({ type: 'openTextView' }));
+onClick('undoButton', () => vscode.postMessage({ type: 'undo' }));
+onClick('redoButton', () => vscode.postMessage({ type: 'redo' }));
+onClick('toolbarFind', () => openFindReplace(false));
+onClick('toolbarTools', () => (activePanel === 'tools' ? closePanel() : showToolsPanel()));
+onClick('toolbarValidate', () => showValidatePanel());
+onClick('toolbarFilter', () => (activePanel === 'filter' ? closePanel() : showFilterPanel()));
+onClick('toolbarTheme', () => vscode.postMessage({ type: 'cycleTheme' }));
+onClick('toggleHeaderButton', () => vscode.postMessage({ type: 'toggleHeader' }));
+onClick('toggleSerialButton', () => vscode.postMessage({ type: 'toggleSerialIndex' }));
+onClick('changeDelimiterButton', () => vscode.postMessage({ type: 'changeSeparator' }));
+onClick('delimiterStatus', () => vscode.postMessage({ type: 'changeSeparator' }));
+onClick('ribbonCopy', () => copySelectionToClipboard());
+onClick('ribbonCut', () => cutSelection());
+onClick('ribbonPaste', () => pasteFromExtensionClipboard());
+onClick('ribbonClear', () => clearSelectedCells());
+onClick('ribbonZoomOut', () => zoomOut());
+onClick('ribbonZoomReset', () => resetZoom());
+onClick('ribbonZoomIn', () => zoomIn());
+onClick('ribbonAddRow', () => postInsertRows(getTargetRows().slice(-1), true));
+onClick('ribbonAddColumn', () => postInsertCols(getTargetCols().slice(-1), true));
+onClick('ribbonDeleteRow', () => postDeleteRows(getTargetRows()));
+onClick('ribbonDeleteColumn', () => postDeleteCols(getTargetCols()));
+
+// ───────── Value bar ─────────
 const restoreFormulaValue = () => {
   if (formulaInput) formulaInput.value = formulaOriginalValue;
   formulaDirty = false;
   formulaInput?.blur();
+  if (anchorCell?.isConnected) { try { anchorCell.focus({ preventScroll: true }); } catch {} }
 };
 
 const commitFormulaValue = () => {
@@ -222,46 +593,74 @@ const commitFormulaValue = () => {
   }
   formulaDirty = false;
   formulaInput.blur();
+  if (formulaTarget.cell?.isConnected) { try { formulaTarget.cell.focus({ preventScroll: true }); } catch {} }
   updateModernStatus();
 };
 
 formulaInput?.addEventListener('focus', () => {
   formulaOriginalValue = formulaInput.value;
   formulaDirty = false;
+  expandFormulaInput();
 });
-formulaInput?.addEventListener('input', () => { formulaDirty = true; });
+formulaInput?.addEventListener('input', () => { formulaDirty = true; expandFormulaInput(); });
 formulaInput?.addEventListener('blur', event => {
+  collapseFormulaInput();
   if (formulaDirty && event.relatedTarget !== formulaApply && event.relatedTarget !== formulaCancel) {
     commitFormulaValue();
   }
 });
 formulaInput?.addEventListener('keydown', event => {
+  event.stopPropagation();
+  if (event.isComposing) return;
   if (event.key === 'Escape') {
     event.preventDefault();
     restoreFormulaValue();
   } else if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
     event.preventDefault();
     commitFormulaValue();
+  } else if (event.key === 'Enter' && (event.shiftKey || event.altKey)) {
+    // Insert a line break inside the value.
+    event.preventDefault();
+    const start = formulaInput.selectionStart;
+    const end = formulaInput.selectionEnd;
+    formulaInput.setRangeText('\n', start, end, 'end');
+    formulaDirty = true;
+    expandFormulaInput();
   }
 });
 formulaApply?.addEventListener('click', commitFormulaValue);
 formulaCancel?.addEventListener('click', restoreFormulaValue);
 
-dataToolActions?.addEventListener('click', event => {
-  const button = event.target.closest('button[data-tool]');
-  if (!button) return;
-  const action = button.dataset.tool;
-  let value;
-  if (action === 'fillEmpty') {
-    value = window.prompt('Value for empty cells / 空セルに入れる値', '');
-    if (value === null) return;
+// Name box: type "12" or "12,3" (row number as shown, optional column) to jump.
+formulaNameBox?.addEventListener('focus', () => { try { formulaNameBox.select(); } catch {} });
+formulaNameBox?.addEventListener('keydown', event => {
+  event.stopPropagation();
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    formulaNameBox.blur();
+    syncFormulaBar();
+    if (anchorCell?.isConnected) { try { anchorCell.focus({ preventScroll: true }); } catch {} }
+    return;
   }
-  vscode.postMessage({ type: 'previewDataTool', request: { action, value } });
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const match = /^\s*(\d+)\s*(?:[,:;\s]\s*(\d+))?\s*$/.exec(formulaNameBox.value);
+  if (!match) return;
+  const displayRow = Math.max(1, Number.parseInt(match[1], 10));
+  const col = match[2] ? Math.max(0, Number.parseInt(match[2], 10) - 1) : (formulaTarget?.col ?? 0);
+  const row = Math.min(FIRST_BODY_ROW + displayRow - 1, LAST_BODY_ROW + 1);
+  const cell = ensureRenderedCellByCoords(row, Math.min(col, Math.max(0, COLUMN_COUNT - 1)));
+  formulaNameBox.blur();
+  if (cell) {
+    setSingleSelection(cell);
+    cell.scrollIntoView({ block: 'center', inline: 'nearest' });
+  }
+  updateModernStatus();
 });
 
 document.addEventListener('click', () => setTimeout(updateModernStatus, 0));
 document.addEventListener('keyup', event => {
-  if (event.target !== formulaInput) queueModernStatusUpdate();
+  if (event.target !== formulaInput && event.target !== formulaNameBox) queueModernStatusUpdate();
 });
 setTimeout(updateModernStatus, 0);
 const dragIndicator = document.createElement('div');
@@ -404,7 +803,7 @@ const restoreState = () => {
       }
     }
     if (typeof st.anchorRow === 'number' && typeof st.anchorCol === 'number') {
-      const tag = (hasHeader && st.anchorRow === 0 ? 'th' : 'td');
+      const tag = (st.anchorRow === HEADER_ROW ? 'th' : 'td');
       let sel = table.querySelector(`${tag}[data-row="${st.anchorRow}"][data-col="${st.anchorCol}"]`);
       // If not present yet (due to chunking), load chunks until available or exhausted
       if (!sel && typeof window.__csvLoadNextChunk === 'function') {
@@ -535,7 +934,9 @@ const ensureTargetStep = () => {
   const { row, col } = pendingEnsureTarget;
   const sel = table.querySelector(`td[data-row="${row}"][data-col="${col}"], th[data-row="${row}"][data-col="${col}"]`);
   if (sel) {
+    const { onReady } = pendingEnsureTarget;
     pendingEnsureTarget = null;
+    if (typeof onReady === 'function') onReady(sel);
     return;
   }
   pendingEnsureTarget.guard -= 1;
@@ -594,98 +995,113 @@ window.addEventListener('wheel', handleZoomWheel, { passive: false });
 
 const hasHeader = document.querySelector('thead') !== null;
 const getCellCoords = cell => ({ row: parseInt(cell.getAttribute('data-row')), col: parseInt(cell.getAttribute('data-col')) });
-const clearSelection = () => { currentSelection.forEach(c => c.classList.remove('selected')); currentSelection = []; };
+const clearSelection = () => {
+  currentSelection.forEach(c => c.classList.remove('selected'));
+  currentSelection = [];
+  selectionKind = 'cells';
+};
 const contextMenu = document.getElementById('contextMenu');
 
-/* ──────── UPDATED showContextMenu ──────── */
+const hideContextMenu = () => {
+  if (contextMenu.style.display === 'none' || !contextMenu.style.display) return false;
+  contextMenu.style.display = 'none';
+  return true;
+};
+
+// Spreadsheet-style context menu: clipboard, sort, and row/column structure.
+// Row/column commands act on every selected row/column, not only the cell
+// under the pointer.
 const showContextMenu = (x, y, row, col) => {
-  contextMenu.innerHTML = '';
-  const item = (label, cb) => {
+  contextMenu.replaceChildren();
+  const item = (label, shortcut, cb) => {
     const d = document.createElement('div');
-    d.textContent = label;
-    d.addEventListener('click', () => { cb(); contextMenu.style.display = 'none'; });
+    d.className = 'menu-item';
+    d.setAttribute('role', 'menuitem');
+    d.tabIndex = -1;
+    d.append(document.createTextNode(label));
+    if (shortcut) {
+      const k = document.createElement('kbd');
+      k.textContent = shortcut;
+      d.append(k);
+    }
+    d.addEventListener('click', () => { hideContextMenu(); cb(); });
     contextMenu.appendChild(d);
   };
   const divider = () => {
+    if (!contextMenu.lastChild || contextMenu.lastChild.className === 'menu-separator') return;
     const d = document.createElement('div');
-    d.style.borderTop = '1px solid #888';
-    d.style.margin = '1px 0';
+    d.className = 'menu-separator';
     contextMenu.appendChild(d);
   };
-  // Derive multi-row/column selection counts
-  const selectedIndexCells = currentSelection.filter(el => el && el.getAttribute && el.getAttribute('data-col') === '-1');
-  const selectedRowIds = Array.from(new Set(selectedIndexCells.map(el => parseInt(el.getAttribute('data-row') || '-1', 10)).filter(n => !isNaN(n)))).sort((a,b)=>a-b);
-  const rowCountSel = selectedRowIds.length;
 
-  const selectedHeaderCells = currentSelection.filter(el => el && el.tagName === 'TH' && el.getAttribute('data-col') !== null);
-  const selectedColIds = Array.from(new Set(selectedHeaderCells.map(el => parseInt(el.getAttribute('data-col') || '-1', 10)).filter(n => !isNaN(n) && n >= 0))).sort((a,b)=>a-b);
-  const colCountSel = selectedColIds.length;
-
-  let addedRowItems = false;
-
-  /* Header-only: SORT functionality */
-  if (lastContextIsHeader) {
-    item('Sort: A-Z', () =>
-      vscode.postMessage({ type: 'sortColumn', index: col, ascending: true }));
-    item('Sort: Z-A', () =>
-      vscode.postMessage({ type: 'sortColumn', index: col, ascending: false }));
-  }        
-
-  /* Row section */
-  if (!isNaN(row) && row >= 0) {
-    if (contextMenu.children.length) divider();
-    const rowsN = rowCountSel > 1 ? rowCountSel : 1;
-    const addAboveLabel = rowsN > 1 ? `Add ${rowsN} ROWS: above` : 'Add ROW: above';
-    const addBelowLabel = rowsN > 1 ? `Add ${rowsN} ROWS: below` : 'Add ROW: below';
-    const delLabel      = rowsN > 1 ? `Delete ${rowsN} ROWS`    : 'Delete ROW';
-    item(addAboveLabel, () => {
-      const base = rowCountSel > 1 ? Math.min(...selectedRowIds) : row;
-      const count = rowsN;
-      vscode.postMessage({ type: 'insertRows', index: base, count });
-    });
-    item(addBelowLabel, () => {
-      const base = rowCountSel > 1 ? Math.max(...selectedRowIds) + 1 : (row + 1);
-      const count = rowsN;
-      vscode.postMessage({ type: 'insertRows', index: base, count });
-    });
-    item(delLabel, () => {
-      if (rowCountSel > 1) {
-        vscode.postMessage({ type: 'deleteRows', indices: selectedRowIds });
-      } else {
-        vscode.postMessage({ type: 'deleteRow', index: row });
-      }
-    });
-    addedRowItems = true;
+  const hasData = currentSelection.some(isDataCell);
+  if (hasData) {
+    item(t('cutSelection'), 'Ctrl+X', () => cutSelection());
+    item(t('copySelection'), 'Ctrl+C', () => copySelectionToClipboard());
   }
+  item(t('pasteSelection'), 'Ctrl+V', () => pasteFromExtensionClipboard());
+  if (hasData) item(t('clearSelection'), 'Del', () => clearSelectedCells());
 
-  /* Column section, preceded by divider if row items exist */
   if (!isNaN(col) && col >= 0) {
-    if (addedRowItems) divider();
-    const colsN = colCountSel > 1 ? colCountSel : 1;
-    const addLeftLabel  = colsN > 1 ? `Add ${colsN} COLUMNS: left`  : 'Add COLUMN: left';
-    const addRightLabel = colsN > 1 ? `Add ${colsN} COLUMNS: right` : 'Add COLUMN: right';
-    const delColLabel   = colsN > 1 ? `Delete ${colsN} COLUMNS`     : 'Delete COLUMN';
-    item(addLeftLabel, () => {
-      const base = colCountSel > 1 ? Math.min(...selectedColIds) : col;
-      vscode.postMessage({ type: 'insertColumns', index: base, count: colsN });
-    });
-    item(addRightLabel, () => {
-      const base = colCountSel > 1 ? Math.max(...selectedColIds) + 1 : (col + 1);
-      vscode.postMessage({ type: 'insertColumns', index: base, count: colsN });
-    });
-    item(delColLabel, () => {
-      if (colCountSel > 1) {
-        vscode.postMessage({ type: 'deleteColumns', indices: selectedColIds });
-      } else {
-        vscode.postMessage({ type: 'deleteColumn', index: col });
-      }
-    });
+    divider();
+    item(t('sortAscending'), '', () => vscode.postMessage({ type: 'sortColumn', index: col, ascending: true }));
+    item(t('sortDescending'), '', () => vscode.postMessage({ type: 'sortColumn', index: col, ascending: false }));
   }
 
-  contextMenu.style.left = x + 'px';
-  contextMenu.style.top = y + 'px';
+  if (!isNaN(row) && row >= 0) {
+    divider();
+    const rows = getTargetRows(row);
+    const n = rows.length;
+    item(n > 1 ? t('insertRowsAbove', { n }) : t('insertRowAbove'), '', () => postInsertRows(rows, false));
+    item(n > 1 ? t('insertRowsBelow', { n }) : t('insertRowBelow'), '', () => postInsertRows(rows, true));
+    item(n > 1 ? t('deleteRows', { n }) : t('deleteRow'), '', () => postDeleteRows(rows));
+  }
+
+  if (!isNaN(col) && col >= 0) {
+    divider();
+    const cols = getTargetCols(col);
+    const n = cols.length;
+    item(n > 1 ? t('insertColumnsLeft', { n }) : t('insertColumnLeft'), '', () => postInsertCols(cols, false));
+    item(n > 1 ? t('insertColumnsRight', { n }) : t('insertColumnRight'), '', () => postInsertCols(cols, true));
+    item(n > 1 ? t('deleteColumns', { n }) : t('deleteColumn'), '', () => postDeleteCols(cols));
+  }
+
+  // Keep the menu inside the viewport.
   contextMenu.style.display = 'block';
+  contextMenu.style.left = '0px';
+  contextMenu.style.top = '0px';
+  const rect = contextMenu.getBoundingClientRect();
+  const left = Math.max(4, Math.min(x, window.innerWidth - rect.width - 4));
+  const top = Math.max(4, Math.min(y, window.innerHeight - rect.height - 4));
+  contextMenu.style.left = `${left}px`;
+  contextMenu.style.top = `${top}px`;
+  const first = contextMenu.querySelector('.menu-item');
+  if (first) {
+    first.classList.add('focused');
+    try { contextMenu.focus({ preventScroll: true }); } catch {}
+  }
 };
+contextMenu.tabIndex = -1;
+contextMenu.addEventListener('keydown', e => {
+  e.stopPropagation();
+  const items = Array.from(contextMenu.querySelectorAll('.menu-item'));
+  const current = items.findIndex(node => node.classList.contains('focused'));
+  const move = delta => {
+    items.forEach(node => node.classList.remove('focused'));
+    const next = items[(current + delta + items.length) % items.length];
+    next?.classList.add('focused');
+  };
+  if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); items[current]?.click(); }
+  else if (e.key === 'Escape' || e.key === 'Tab') {
+    e.preventDefault();
+    hideContextMenu();
+    if (anchorCell?.isConnected) { try { anchorCell.focus({ preventScroll: true }); } catch {} }
+  }
+});
+window.addEventListener('blur', () => hideContextMenu());
+scrollContainer?.addEventListener('scroll', () => hideContextMenu(), { passive: true });
 
 const getElementTarget = target => {
   if (target instanceof Element) return target;
@@ -969,18 +1385,15 @@ document.addEventListener('click', (e) => {
   }
 });
 
-/* ──────── UPDATED contextmenu listener ──────── */
 table.addEventListener('contextmenu', e => {
   const target = getCellTarget(e.target);
   if (!target) return;
-  const colAttr = target.getAttribute('data-col') ?? target.getAttribute('data-sheet-col');
-  const rowAttr = target.getAttribute('data-row');
-  const col = parseInt(colAttr ?? '', 10);
-  const row = parseInt(rowAttr ?? '', 10);
-  if ((isNaN(col) || col === -1) && (isNaN(row) || row === -1)) return;
+  const col = parseInt(target.getAttribute('data-col') ?? '', 10);
+  const row = parseInt(target.getAttribute('data-row') ?? '', 10);
   e.preventDefault();
-  lastContextIsHeader = target.tagName === 'TH' && Number.isInteger(col) && col >= 0;
-  showContextMenu(e.pageX, e.pageY, row, col);
+  if (editingCell) return;
+  // The row-number column offers row commands; the corner cell only clipboard.
+  showContextMenu(e.clientX, e.clientY, row, col);
 });
 
 table.addEventListener('mousedown', e => {
@@ -1019,6 +1432,7 @@ table.addEventListener('mousedown', e => {
         anchorCell = target;
         rangeEndCell = target;
         try { target.focus({ preventScroll: true }); } catch { try { target.focus(); } catch {} }
+        updateModernStatus();
       }
     }
     return; // do not start drag selection on right-click
@@ -1181,7 +1595,7 @@ const selectRange = (start, end) => {
   const minCol = Math.min(start.col, end.col), maxCol = Math.max(start.col, end.col);
   for(let r = minRow; r <= maxRow; r++){
     for(let c = minCol; c <= maxCol; c++){
-      const selector = (hasHeader && r === 0 ? 'th' : 'td') + '[data-row="'+r+'"][data-col="'+c+'"]';
+      const selector = (r === HEADER_ROW ? 'th' : 'td') + '[data-row="'+r+'"][data-col="'+c+'"]';
       const selCell = table.querySelector(selector);
       if(selCell){ selCell.classList.add('selected'); currentSelection.push(selCell); }
     }
@@ -1200,6 +1614,7 @@ const selectFullColumnRange = (col1, col2) => {
       }
     });
   });
+  selectionKind = 'columns';
   queueModernStatusUpdate();
 };
 
@@ -1214,6 +1629,7 @@ const selectFullRowRange = (row1, row2) => {
       }
     });
   });
+  selectionKind = 'rows';
   queueModernStatusUpdate();
 };
 
@@ -1260,8 +1676,6 @@ const replaceInput = document.getElementById('replaceInput');
 const findStatus = document.getElementById('findStatus');
 const findPrev = document.getElementById('findPrev');
 const findNext = document.getElementById('findNext');
-const findMenuButton = document.getElementById('findMenuButton');
-const findOverflowMenu = document.getElementById('findOverflowMenu');
 const findClose = document.getElementById('findClose');
 const findCaseToggle = document.getElementById('findCaseToggle');
 const findWordToggle = document.getElementById('findWordToggle');
@@ -1269,7 +1683,6 @@ const findRegexToggle = document.getElementById('findRegexToggle');
 const replaceCaseToggle = document.getElementById('replaceCaseToggle');
 const replaceOne = document.getElementById('replaceOne');
 const replaceAll = document.getElementById('replaceAll');
-const findOverflowPreserveCase = document.getElementById('findOverflowPreserveCase');
 
 const findReplaceState = {
   open: false,
@@ -1302,15 +1715,29 @@ const clearFindHighlights = () => {
     el.classList.remove('active-match');
   });
 };
-const hideFindOverflowMenu = () => {
-  findOverflowMenu.classList.remove('open');
-};
 const setReplaceExpanded = expanded => {
   findReplaceState.replaceExpanded = expanded;
   findReplaceWidget.classList.toggle('replace-collapsed', !expanded);
   findReplaceWidget.classList.toggle('replace-expanded', expanded);
   replaceToggle.setAttribute('aria-expanded', String(expanded));
-  replaceToggle.innerText = expanded ? '⌄' : '›';
+  replaceToggle.querySelector('.codicon')?.classList.toggle('codicon-chevron-down', expanded);
+  replaceToggle.querySelector('.codicon')?.classList.toggle('codicon-chevron-right', !expanded);
+  persistFindState();
+};
+// Find state survives the full re-render that follows structural edits.
+const persistFindState = () => {
+  writeUiState({
+    find: {
+      open: findReplaceState.open,
+      replaceExpanded: findReplaceState.replaceExpanded,
+      matchCase: findReplaceState.matchCase,
+      wholeWord: findReplaceState.wholeWord,
+      regex: findReplaceState.regex,
+      preserveCase: findReplaceState.preserveCase,
+      query: findInput.value,
+      replacement: replaceInput.value
+    }
+  });
 };
 const syncFindToggleUi = () => {
   findCaseToggle.setAttribute('aria-pressed', String(findReplaceState.matchCase));
@@ -1321,11 +1748,13 @@ const syncFindToggleUi = () => {
 const updateFindStatus = () => {
   const query = findInput.value;
   if (!query || query.length === 0 || findMatches.length === 0) {
-    findStatus.innerText = findReplaceState.invalidRegex ? 'Invalid regex' : 'No results';
+    findStatus.textContent = findReplaceState.invalidRegex ? t('invalidRegex') : t('noResults');
+    findStatus.classList.toggle('fr-status-empty', !!query);
     return;
   }
+  findStatus.classList.remove('fr-status-empty');
   const suffix = findMatchesTruncated ? '+' : '';
-  findStatus.innerText = `${currentMatchIndex + 1} of ${findMatches.length}${suffix}`;
+  findStatus.textContent = t('matchPosition', { i: currentMatchIndex + 1, n: `${findMatches.length}${suffix}` });
 };
 const updateFindControls = () => {
   const hasQuery = findInput.value.length > 0;
@@ -1360,7 +1789,7 @@ const getRenderedFindCells = () => {
 const getRenderedCellByCoords = (row, col) => {
   return table.querySelector(`td[data-row="${row}"][data-col="${col}"], th[data-row="${row}"][data-col="${col}"]`);
 };
-const ensureRenderedCellByCoords = (row, col) => {
+const ensureRenderedCellByCoords = (row, col, onReady) => {
   let cell = getRenderedCellByCoords(row, col);
   if (cell) {
     return cell;
@@ -1374,7 +1803,7 @@ const ensureRenderedCellByCoords = (row, col) => {
     cell = getRenderedCellByCoords(row, col);
   }
   if (!cell && (remoteHasMoreChunks || remoteChunkRequestInFlight)) {
-    pendingEnsureTarget = { row, col, guard: 5000 };
+    pendingEnsureTarget = { row, col, guard: 5000, onReady };
     requestRemoteChunk();
   }
   return cell;
@@ -1523,15 +1952,24 @@ const replaceAllMatches = () => {
   }
   runFind(false);
 };
-const openFindReplace = expandReplace => {
-  findFocusBeforeOpen = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+const openFindReplace = (expandReplace, focus = true) => {
+  if (focus) {
+    findFocusBeforeOpen = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
   findReplaceState.open = true;
   findReplaceWidget.classList.add('open');
   setReplaceExpanded(expandReplace);
   syncFindToggleUi();
-  hideFindOverflowMenu();
-  try { findInput.focus({ preventScroll: true }); } catch { try { findInput.focus(); } catch {} }
-  findInput.select();
+  if (focus) {
+    // Seed the query from a short single-line selection, like VS Code.
+    const active = getActiveDataCell();
+    const seed = (active?.textContent || '').trim();
+    if (!findInput.value && seed && seed.length <= 80 && !/\n/.test(seed)) {
+      findInput.value = seed;
+    }
+    try { findInput.focus({ preventScroll: true }); } catch { try { findInput.focus(); } catch {} }
+    findInput.select();
+  }
   runFind(true);
 };
 const closeFindReplace = () => {
@@ -1543,7 +1981,7 @@ const closeFindReplace = () => {
   latestFindRequestId = 0;
   findReplaceState.open = false;
   findReplaceWidget.classList.remove('open');
-  hideFindOverflowMenu();
+  persistFindState();
   clearFindHighlights();
   findMatches = [];
   currentMatchIndex = -1;
@@ -1556,9 +1994,22 @@ const closeFindReplace = () => {
   try { focusTarget.focus({ preventScroll: true }); } catch { try { focusTarget.focus(); } catch {} }
 };
 
-findInput.addEventListener('input', () => scheduleFind(false));
+findInput.addEventListener('input', () => { scheduleFind(false); persistFindState(); });
+replaceInput.addEventListener('input', () => persistFindState());
+// Alt+C / Alt+W / Alt+R toggle search options, as in VS Code.
+const handleFindOptionShortcut = e => {
+  if (!e.altKey || e.ctrlKey || e.metaKey) return false;
+  const key = (e.key || '').toLowerCase();
+  const toggle = key === 'c' ? findCaseToggle : key === 'w' ? findWordToggle : key === 'r' ? findRegexToggle : null;
+  if (!toggle) return false;
+  e.preventDefault();
+  toggle.click();
+  return true;
+};
 findInput.addEventListener('keydown', e => {
   e.stopPropagation();
+  if (e.isComposing) return;
+  if (handleFindOptionShortcut(e)) return;
   if (e.key === 'Escape') {
     e.preventDefault();
     closeFindReplace();
@@ -1581,6 +2032,13 @@ findInput.addEventListener('keydown', e => {
 });
 replaceInput.addEventListener('keydown', e => {
   e.stopPropagation();
+  if (e.isComposing) return;
+  if (handleFindOptionShortcut(e)) return;
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.altKey) {
+    e.preventDefault();
+    replaceAllMatches();
+    return;
+  }
   if (e.key === 'Escape') {
     e.preventDefault();
     closeFindReplace();
@@ -1602,46 +2060,31 @@ replaceToggleGutter.addEventListener('click', () => {
 findCaseToggle.addEventListener('click', () => {
   findReplaceState.matchCase = !findReplaceState.matchCase;
   syncFindToggleUi();
+  persistFindState();
   runFind(true);
 });
 findWordToggle.addEventListener('click', () => {
   findReplaceState.wholeWord = !findReplaceState.wholeWord;
   syncFindToggleUi();
+  persistFindState();
   runFind(true);
 });
 findRegexToggle.addEventListener('click', () => {
   findReplaceState.regex = !findReplaceState.regex;
   syncFindToggleUi();
+  persistFindState();
   runFind(true);
 });
 replaceCaseToggle.addEventListener('click', () => {
   findReplaceState.preserveCase = !findReplaceState.preserveCase;
   syncFindToggleUi();
+  persistFindState();
 });
 findPrev.addEventListener('click', () => navigateFind(true));
 findNext.addEventListener('click', () => navigateFind(false));
 findClose.addEventListener('click', closeFindReplace);
-findMenuButton.addEventListener('click', e => {
-  e.stopPropagation();
-  findOverflowMenu.classList.toggle('open');
-});
 replaceOne.addEventListener('click', replaceCurrentMatch);
 replaceAll.addEventListener('click', replaceAllMatches);
-findOverflowPreserveCase.addEventListener('click', () => {
-  findReplaceState.preserveCase = !findReplaceState.preserveCase;
-  syncFindToggleUi();
-  hideFindOverflowMenu();
-});
-document.addEventListener('mousedown', e => {
-  if (!isFindWidgetTarget(e.target)) {
-    hideFindOverflowMenu();
-    return;
-  }
-  const el = getElementTarget(e.target);
-  if (el && !el.closest('#findMenuButton') && !el.closest('#findOverflowMenu')) {
-    hideFindOverflowMenu();
-  }
-});
 syncFindToggleUi();
 updateFindStatus();
 updateFindControls();
@@ -1659,100 +2102,143 @@ window.addEventListener('csvChunkLoaded', () => {
   }
 });
 
-// Capture-phase handler to intercept Cmd/Ctrl + Arrow and move to extremes
-document.addEventListener('keydown', e => {
-  if (isFindWidgetTarget(e.target)) {
-    return;
+// ───────── Keyboard navigation ─────────
+// Arrow-like keys we treat as navigation. PageUp/PageDown are handled
+// separately and never with Ctrl/Cmd, which VS Code uses to switch tabs.
+const NAV_KEYS = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Up','Down','Left','Right','Home','End'];
+const isRowHidden = cell => cell?.closest?.('tr')?.style.display === 'none';
+const TOP_ROW = Number.isInteger(HEADER_ROW) ? HEADER_ROW : FIRST_BODY_ROW;
+let renderedMaxCol = null;
+const getMaxCol = () => {
+  if (renderedMaxCol === null) {
+    const firstRow = table.querySelector('tr');
+    const cols = firstRow
+      ? Array.from(firstRow.querySelectorAll('[data-col]')).map(cell => Number.parseInt(cell.getAttribute('data-col') || '-1', 10))
+      : [];
+    renderedMaxCol = Math.max(0, ...cols);
   }
-  const isArrowKey = (k) => ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Up','Down','Left','Right','Home','End'].includes(k);
-  if (!editingCell && (e.ctrlKey || e.metaKey) && isArrowKey(e.key)) {
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    e.stopPropagation();
-
-    const sc = document.querySelector('.table-container');
-    if (sc) {
-      if (['ArrowLeft','Left','Home'].includes(e.key))  sc.scrollTo({ left: 0, behavior: 'smooth' });
-      if (['ArrowRight','Right','End'].includes(e.key)) sc.scrollTo({ left: sc.scrollWidth, behavior: 'smooth' });
-      if (['ArrowUp','Up'].includes(e.key))    sc.scrollTo({ top: 0, behavior: 'smooth' });
-      if (['ArrowDown','Down'].includes(e.key))  sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+  return renderedMaxCol;
+};
+// Last row the user can land on: the last data row, or the trailing empty row
+// when the file has no data rows yet.
+const getBottomRow = () => (DATA_ROW_COUNT > 0 ? LAST_BODY_ROW : FIRST_BODY_ROW);
+const cellAt = (row, col, onReady) => {
+  if (row < TOP_ROW || col < 0 || col > getMaxCol()) return null;
+  if (Number.isInteger(HEADER_ROW) && row === HEADER_ROW) {
+    return table.querySelector(`th[data-row="${row}"][data-col="${col}"]`);
+  }
+  return ensureRenderedCellByCoords(row, col, onReady);
+};
+// Find the nearest row in `direction` from `row` (inclusive) whose cell is
+// rendered and not hidden by the quick filter.
+const visibleCellFrom = (row, col, direction) => {
+  let r = row;
+  for (let guard = 0; guard < 200000; guard++) {
+    const cell = cellAt(r, col);
+    if (!cell) return null;
+    if (!isRowHidden(cell)) return cell;
+    r += direction;
+  }
+  return null;
+};
+const moveSelectionTo = (cell, extend) => {
+  if (!cell) return;
+  if (extend && anchorCell) {
+    rangeEndCell = cell;
+    const anchor = anchorCell;
+    selectRange(getCellCoords(anchor), getCellCoords(cell));
+    anchorCell = anchor;
+    persistState();
+    try { anchor.focus({ preventScroll: true }); } catch {}
+    cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  } else {
+    setSingleSelection(cell);
+  }
+  queueModernStatusUpdate();
+};
+const getPageRows = () => {
+  const sample = anchorCell || table.querySelector('tbody td');
+  const rowHeight = sample ? Math.max(1, sample.getBoundingClientRect().height) : 22;
+  const viewport = scrollContainer ? scrollContainer.clientHeight : window.innerHeight;
+  return Math.max(1, Math.floor(viewport / rowHeight) - 2);
+};
+// Returns true when the key was handled as grid navigation.
+const handleNavigationKey = e => {
+  const ref = (e.shiftKey ? rangeEndCell : null) || anchorCell;
+  if (!ref) return false;
+  const { row, col } = getCellCoords(ref);
+  if (!Number.isInteger(row) || !Number.isInteger(col) || col < 0) return false;
+  const ctrl = e.ctrlKey || e.metaKey;
+  const key = e.key;
+  let target = null;
+  if (key === 'PageDown' || key === 'PageUp') {
+    if (ctrl) return false;
+    const delta = getPageRows() * (key === 'PageDown' ? 1 : -1);
+    const nextRow = Math.max(TOP_ROW, Math.min(getBottomRow(), row + delta));
+    target = visibleCellFrom(nextRow, col, delta > 0 ? -1 : 1) || visibleCellFrom(nextRow, col, delta > 0 ? 1 : -1);
+  } else if (key === 'Home' || key === 'End') {
+    const atEnd = key === 'End';
+    if (ctrl) {
+      const targetRow = atEnd ? getBottomRow() : TOP_ROW;
+      const targetCol = atEnd ? getMaxCol() : 0;
+      const select = cell => { if (cell) moveSelectionTo(cell, e.shiftKey); };
+      target = cellAt(targetRow, targetCol, select);
+      if (target && isRowHidden(target)) target = visibleCellFrom(targetRow, targetCol, atEnd ? -1 : 1);
     } else {
-      if (['ArrowUp','Up'].includes(e.key)) {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-      if (['ArrowDown','Down'].includes(e.key)) {
-        const h = Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight
-        );
-        window.scrollTo({ top: h, behavior: 'smooth' });
-      }
+      target = cellAt(row, atEnd ? getMaxCol() : 0);
     }
-
-    const ref = anchorCell || currentSelection[0] || document.querySelector('td.selected, th.selected') || document.querySelector('td, th');
-    let target = null;
-    if (ref) {
-      const { row, col } = getCellCoords(ref);
-      if (['ArrowLeft','Left','Home'].includes(e.key)) {
-        const tag = (hasHeader && row === 0 ? 'th' : 'td');
-        const rowCells = Array.from(table.querySelectorAll(tag + '[data-row="'+row+'"]'))
-          .filter(el => el.getAttribute('data-col') !== null && el.getAttribute('data-col') !== '-1');
-        const min = rowCells.reduce((acc, el) => Math.min(acc, parseInt(el.getAttribute('data-col'))), Infinity);
-        target = rowCells.find(el => parseInt(el.getAttribute('data-col')) === min) || ref;
-      } else if (['ArrowRight','Right','End'].includes(e.key)) {
-        const tag = (hasHeader && row === 0 ? 'th' : 'td');
-        const rowCells = Array.from(table.querySelectorAll(tag + '[data-row="'+row+'"]'))
-          .filter(el => el.getAttribute('data-col') !== null && el.getAttribute('data-col') !== '-1');
-        const max = rowCells.reduce((acc, el) => Math.max(acc, parseInt(el.getAttribute('data-col'))), -1);
-        target = rowCells.find(el => parseInt(el.getAttribute('data-col')) === max) || ref;
-      } else if (['ArrowUp','Up'].includes(e.key)) {
-        const topRow = getFirstDataRow();
-        target = table.querySelector('td[data-row="'+topRow+'"][data-col="'+col+'"]') || ref;
-      } else if (['ArrowDown','Down'].includes(e.key)) {
-        const colCells = Array.from(table.querySelectorAll('td[data-col="'+col+'"]'));
-        target = (colCells.length ? colCells[colCells.length - 1] : null) || ref;
+  } else {
+    const dir = key.replace('Arrow', '');
+    if (ctrl) {
+      if (dir === 'Left') target = cellAt(row, 0);
+      else if (dir === 'Right') target = cellAt(row, getMaxCol());
+      else if (dir === 'Up') target = visibleCellFrom(TOP_ROW, col, 1);
+      else if (dir === 'Down') {
+        const select = cell => { if (cell) moveSelectionTo(isRowHidden(cell) ? visibleCellFrom(getBottomRow(), col, -1) : cell, e.shiftKey); };
+        target = cellAt(getBottomRow(), col, select);
+        if (target && isRowHidden(target)) target = visibleCellFrom(getBottomRow(), col, -1);
       }
-    }
-
-    if (target) {
-      clearSelection();
-      target.classList.add('selected');
-      currentSelection.push(target);
-      anchorCell = target;
-      rangeEndCell = target;
-      persistState();
-      target.focus({preventScroll:true});
-      if (['ArrowUp','Up'].includes(e.key)) {
-        const topRow = getFirstDataRow();
-        const below = table.querySelector('td[data-row="'+topRow+'"][data-col="'+getCellCoords(target).col+'"]');
-        if (below) {
-          below.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
-        } else {
-          target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
-        }
-      } else {
-        target.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'smooth' });
-      }
+    } else if (dir === 'Left') target = cellAt(row, col - 1);
+    else if (dir === 'Right') target = cellAt(row, col + 1);
+    else if (dir === 'Up') target = visibleCellFrom(row - 1, col, -1);
+    else if (dir === 'Down') {
+      // Stay on the trailing empty row instead of walking off the grid.
+      target = row + 1 <= getBottomRow() + 1 ? visibleCellFrom(row + 1, col, 1) : null;
     }
   }
-}, true);
+  if (target) {
+    moveSelectionTo(target, e.shiftKey);
+  }
+  return true;
+};
+
+// Start editing the active cell. IME composition (e.g. Japanese input) begins
+// with a 'Process' keydown; the editor must be focused before composition
+// starts, so the default action is not prevented.
+const isImeKey = e => e.isComposing || e.key === 'Process' || e.keyCode === 229;
+
+const isInChrome = target => {
+  const node = getElementTarget(target);
+  return !!(node && node.closest('.csv-commandbar, .cell-bar, #csvPanel, #contextMenu, #findReplaceWidget'));
+};
 
 document.addEventListener('keydown', e => {
   if (maybeHandleZoomShortcut(e)) {
     return;
   }
   const key = typeof e.key === 'string' ? e.key.toLowerCase() : '';
-  if ((e.ctrlKey || e.metaKey) && key === 'f') {
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && !e.altKey && key === 'f') {
     e.preventDefault();
     openFindReplace(false);
     return;
   }
-  if ((e.ctrlKey || e.metaKey) && key === 'h') {
+  if (ctrl && !e.altKey && key === 'h') {
     e.preventDefault();
     openFindReplace(true);
     return;
   }
-  if (findReplaceState.open && (e.ctrlKey || e.metaKey) && key === 'g') {
+  if (findReplaceState.open && ctrl && key === 'g') {
     e.preventDefault();
     navigateFind(e.shiftKey);
     return;
@@ -1762,90 +2248,43 @@ document.addEventListener('keydown', e => {
     navigateFind(e.shiftKey);
     return;
   }
-  if (findReplaceState.open && e.key === 'Escape') {
-    e.preventDefault();
-    closeFindReplace();
-    return;
-  }
-  if (isFindWidgetTarget(e.target)) {
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !editingCell) {
-    e.preventDefault(); selectAllCells(); return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'c' && currentSelection.length > 0) {
-    e.preventDefault(); copySelectionToClipboard(); return;
-  }
-
-  // Clear contents of selected cells when not editing
-  if (!editingCell && currentSelection.length > 0 && (e.key === 'Delete' || e.key === 'Backspace')) {
-    e.preventDefault();
-    const cellsToClear = currentSelection
-      .filter(cell => cell && cell.getAttribute('data-col') !== null && cell.getAttribute('data-col') !== '-1');
-    if (cellsToClear.length === 0) return;
-    cellsToClear.forEach(cell => {
-      const { row, col } = getCellCoords(cell);
-      // Update UI immediately
-      cell.textContent = '';
-      // Persist change to extension
-      vscode.postMessage({ type: 'editCell', row, col, value: '' });
-    });
+  if (isFindWidgetTarget(e.target) || isInChrome(e.target)) {
     return;
   }
 
-  const isArrowKey = (k) => ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Up','Down','Left','Right','Home','End'].includes(k);
-  if (!editingCell && (e.ctrlKey || e.metaKey) && isArrowKey(e.key)) {
-    e.preventDefault();
-    const sc = document.querySelector('.table-container');
-    if (sc) {
-      if (['ArrowLeft','Left','Home'].includes(e.key))  sc.scrollTo({ left: 0, behavior: 'smooth' });
-      if (['ArrowRight','Right','End'].includes(e.key)) sc.scrollTo({ left: sc.scrollWidth, behavior: 'smooth' });
-      if (['ArrowUp','Up'].includes(e.key))    sc.scrollTo({ top: 0, behavior: 'smooth' });
-      if (['ArrowDown','Down'].includes(e.key))  sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+  // Escape: close the innermost thing first.
+  if (e.key === 'Escape') {
+    if (hideContextMenu()) { e.preventDefault(); return; }
+    if (editingCell) {
+      // textContent (not innerText) so newlines are restored as text, not <br>.
+      e.preventDefault(); editingCell.textContent = originalCellValue; editingCell.blur();
+      if (anchorCell?.isConnected) { try { anchorCell.focus({ preventScroll: true }); } catch {} }
+      return;
     }
-
-    let refCell = anchorCell;
-    if (!refCell) {
-      refCell = currentSelection[0] || document.querySelector('td.selected, th.selected');
-    }
-    let target = null;
-    if (refCell) {
-      const { row, col } = getCellCoords(refCell);
-      if (['ArrowLeft','Left','Home'].includes(e.key)) {
-        const tag = (hasHeader && row === 0 ? 'th' : 'td');
-        const rowCells = Array.from(table.querySelectorAll(tag + '[data-row="'+row+'"]'))
-          .filter(el => el.getAttribute('data-col') !== null && el.getAttribute('data-col') !== '-1');
-        const min = rowCells.reduce((acc, el) => Math.min(acc, parseInt(el.getAttribute('data-col'))), Infinity);
-        target = rowCells.find(el => parseInt(el.getAttribute('data-col')) === min) || refCell;
-      } else if (['ArrowRight','Right','End'].includes(e.key)) {
-        const tag = (hasHeader && row === 0 ? 'th' : 'td');
-        const rowCells = Array.from(table.querySelectorAll(tag + '[data-row="'+row+'"]'))
-          .filter(el => el.getAttribute('data-col') !== null && el.getAttribute('data-col') !== '-1');
-        const max = rowCells.reduce((acc, el) => Math.max(acc, parseInt(el.getAttribute('data-col'))), -1);
-        target = rowCells.find(el => parseInt(el.getAttribute('data-col')) === max) || refCell;
-      } else if (['ArrowUp','Up'].includes(e.key)) {
-        if (hasHeader) {
-          target = table.querySelector('th[data-row="0"][data-col="'+col+'"]') || refCell;
-        } else {
-          target = table.querySelector('td[data-row="0"][data-col="'+col+'"]') || refCell;
-        }
-      } else if (['ArrowDown','Down'].includes(e.key)) {
-        const colCells = Array.from(table.querySelectorAll('td[data-col="'+col+'"]'));
-        target = (colCells.length ? colCells[colCells.length - 1] : null) || refCell;
-      }
-    }
-
-    if (target) {
-      clearSelection();
-      target.classList.add('selected');
-      currentSelection.push(target);
-      anchorCell = target;
-      rangeEndCell = target;
-      persistState();
-      target.focus({preventScroll:true});
-      target.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'smooth' });
+    if (findReplaceState.open) { e.preventDefault(); closeFindReplace(); return; }
+    if (activePanel) { e.preventDefault(); closePanel(); return; }
+    if (currentSelection.length > 1 && anchorCell) {
+      setSingleSelection(anchorCell);
     }
     return;
+  }
+
+  if (!editingCell) {
+    if (ctrl && !e.altKey && key === 'a') {
+      e.preventDefault(); selectAllCells(); return;
+    }
+    if (ctrl && !e.altKey && key === 'c' && currentSelection.length > 0) {
+      e.preventDefault(); copySelectionToClipboard(); return;
+    }
+    if (ctrl && !e.altKey && key === 'x' && currentSelection.length > 0) {
+      e.preventDefault(); cutSelection(); return;
+    }
+    // Clear contents of selected cells as one undoable edit.
+    if (currentSelection.length > 0 && (e.key === 'Delete' || e.key === 'Backspace') && !ctrl) {
+      e.preventDefault();
+      clearSelectedCells();
+      return;
+    }
   }
 
   if (!editingCell && e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1856,10 +2295,8 @@ document.addEventListener('keydown', e => {
     if (!coords || !Number.isInteger(coords.row) || !Number.isInteger(coords.col) || coords.col < 0) {
       return;
     }
-    const bounds = getDataColumnBounds();
-    if (!bounds) return;
-    const { minCol, maxCol } = bounds;
-    const firstDataRow = getFirstDataRow();
+    const minCol = 0;
+    const maxCol = getMaxCol();
     const isBackward = !!e.shiftKey;
     let targetRow = coords.row;
     let targetCol = coords.col + (isBackward ? -1 : 1);
@@ -1867,7 +2304,7 @@ document.addEventListener('keydown', e => {
       targetRow += 1;
       targetCol = minCol;
     } else if (isBackward && targetCol < minCol) {
-      if (targetRow <= firstDataRow) {
+      if (targetRow <= TOP_ROW) {
         return;
       }
       targetRow -= 1;
@@ -1880,18 +2317,37 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  /* ──────── NEW: ENTER + DIRECT TYPING HANDLERS ──────── */
+  /* ──────── EDIT ENTRY: Enter, F2, direct typing, IME ──────── */
+  const activeCell = anchorCell && isDataCell(anchorCell) ? anchorCell : null;
+  if (!editingCell && activeCell) {
+    if (currentSelection.length > 1 && (e.key === 'Enter' || e.key === 'F2' || isImeKey(e) || (e.key.length === 1 && !ctrl && !e.altKey))) {
+      // Editing always targets the active cell, like spreadsheets.
+      setSingleSelection(activeCell);
+    }
+  }
+  // Row numbers are not editable values.
+  if (!editingCell && anchorCell && !isDataCell(anchorCell) && (e.key === 'Enter' || e.key === 'F2' || isImeKey(e) || (e.key.length === 1 && !ctrl && !e.altKey))) {
+    e.preventDefault();
+    return;
+  }
   if (!editingCell && anchorCell && currentSelection.length === 1) {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === 'F2') {
       e.preventDefault();
       const cell = anchorCell;
-      // Detail edit via Enter
+      // Detail edit via Enter / F2
       editCell(cell, undefined, 'detail');
-      if (e.shiftKey) {
+      if (e.key === 'Enter' && e.shiftKey) {
         // Shift+Enter from selection should open detail edit and insert
         // a newline immediately on the very first keypress.
         appendVisibleNewlineAtEnd(cell);
       }
+      return;
+    }
+    if (isImeKey(e)) {
+      const cell = anchorCell;
+      // Do not preventDefault: the IME composes straight into the cell.
+      cell.textContent = '';
+      editCell(cell, undefined, 'quick', { keepCaret: true });
       return;
     }
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1906,92 +2362,26 @@ document.addEventListener('keydown', e => {
     }
   }
 
-  /* ──────── ARROW KEY NAVIGATION ──────── */
-  if (!editingCell && anchorCell && e.shiftKey && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
-    const { row, col } = getCellCoords(rangeEndCell || anchorCell);
-    let targetRow = row, targetCol = col;
-    switch(e.key){
-      case 'ArrowUp':   targetRow = row - 1; break;
-      case 'ArrowDown': targetRow = row + 1; break;
-      case 'ArrowLeft': targetCol = col - 1; break;
-      case 'ArrowRight':targetCol = col + 1; break;
-    }
-    if(targetRow < 0 || targetCol < 0) return;
-    const tag = (hasHeader && targetRow === 0 ? 'th' : 'td');
-    const nextCell = table.querySelector(`${tag}[data-row="${targetRow}"][data-col="${targetCol}"]`);
-    if(nextCell){
+  /* ──────── NAVIGATION ──────── */
+  if (!editingCell && (NAV_KEYS.includes(e.key) || e.key === 'PageUp' || e.key === 'PageDown')) {
+    if (handleNavigationKey(e)) {
       e.preventDefault();
-      rangeEndCell = nextCell;
-      selectRange(getCellCoords(anchorCell), getCellCoords(rangeEndCell));
-      persistState();
-      anchorCell.focus({preventScroll:true});
-      rangeEndCell.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'smooth' });
     }
     return;
   }
 
-  if (!editingCell && anchorCell && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
-    const { row, col } = getCellCoords(anchorCell);
-    let targetRow = row, targetCol = col;
-    switch(e.key){
-      case 'ArrowUp':   targetRow = row - 1; break;
-      case 'ArrowDown': targetRow = row + 1; break;
-      case 'ArrowLeft': targetCol = col - 1; break;
-      case 'ArrowRight':targetCol = col + 1; break;
-    }
-    if(targetRow < 0 || targetCol < 0) return;
-    const tag = (hasHeader && targetRow === 0 ? 'th' : 'td');
-    const nextCell = table.querySelector(`${tag}[data-row="${targetRow}"][data-col="${targetCol}"]`);
-    if(nextCell){
-      e.preventDefault();
-      clearSelection();
-      nextCell.classList.add('selected');
-      currentSelection.push(nextCell);
-      anchorCell = nextCell;
-      rangeEndCell = nextCell;
-      persistState();
-      nextCell.focus({preventScroll:true});
-      nextCell.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'smooth' });
-    }
+  // Keys that confirm or navigate an IME composition belong to the IME.
+  if (editingCell && isImeKey(e)) {
     return;
   }
 
   // QUICK EDIT: Arrow keys commit and move selection (no re-entering edit)
   if (editingCell && editMode === 'quick' && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
     e.preventDefault();
-    const { row, col } = getCellCoords(editingCell);
-    let targetRow = row, targetCol = col;
-    switch(e.key){
-      case 'ArrowUp':   targetRow = row - 1; break;
-      case 'ArrowDown': targetRow = row + 1; break;
-      case 'ArrowLeft': targetCol = col - 1; break;
-      case 'ArrowRight':targetCol = col + 1; break;
-    }
-    if (targetRow >= 0 && targetCol >= 0) {
-      const tag = (hasHeader && targetRow === 0 ? 'th' : 'td');
-      const nextCell = table.querySelector(`${tag}[data-row="${targetRow}"][data-col="${targetCol}"]`);
-      if (nextCell) {
-        const commitAndMove = () => {
-          clearSelection();
-          nextCell.classList.add('selected');
-          currentSelection.push(nextCell);
-          anchorCell = nextCell;
-          rangeEndCell = nextCell;
-          persistState();
-          nextCell.focus({preventScroll:true});
-          nextCell.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'smooth' });
-        };
-        const cellRef = editingCell;
-        cellRef && cellRef.blur();
-        setTimeout(commitAndMove, 0);
-      } else {
-        const cellRef = editingCell;
-        cellRef && cellRef.blur();
-      }
-    } else {
-      const cellRef = editingCell;
-      cellRef && cellRef.blur();
-    }
+    const cellRef = editingCell;
+    cellRef.blur();
+    setSingleSelection(cellRef);
+    handleNavigationKey({ key: e.key, shiftKey: false, ctrlKey: false, metaKey: false });
     return;
   }
 
@@ -2003,20 +2393,21 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  if (editingCell && ((e.ctrlKey || e.metaKey) && e.key === 's')) {
+  if (editingCell && ((e.ctrlKey || e.metaKey) && key === 's')) {
     e.preventDefault();
     editingCell.blur();
     vscode.postMessage({ type: 'save' });
   }
   if (editingCell && e.key === 'Enter') {
     e.preventDefault();
-    if (e.shiftKey) {
+    if (e.shiftKey || e.altKey) {
       if (!insertNewlineAtCaret(editingCell)) {
         appendVisibleNewlineAtEnd(editingCell);
       }
       return;
     }
     const { row, col } = getCellCoords(editingCell);
+    const editedCell = editingCell;
     editingCell.blur();
     const targetRow = row + 1;
     // Editing Enter commits and moves selection down (no auto-edit).
@@ -2024,6 +2415,7 @@ document.addEventListener('keydown', e => {
     if (nextCell) {
       setSingleSelection(nextCell);
     } else {
+      setSingleSelection(editedCell);
       try {
         const st = vscode.getState() || {};
         vscode.setState({ ...st, anchorRow: targetRow, anchorCol: col });
@@ -2034,24 +2426,20 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     const cell = editingCell;
     const { row, col } = getCellCoords(cell);
-    const bounds = getDataColumnBounds();
-    const firstDataRow = getFirstDataRow();
+    const maxCol = getMaxCol();
     const isBackward = !!e.shiftKey;
     let targetRow = row;
-    let targetCol = col;
-    let canMove = !!bounds;
-    if (bounds) {
-      targetCol = col + (isBackward ? -1 : 1);
-      if (!isBackward && targetCol > bounds.maxCol) {
-        targetRow += 1;
-        targetCol = bounds.minCol;
-      } else if (isBackward && targetCol < bounds.minCol) {
-        if (targetRow <= firstDataRow) {
-          canMove = false;
-        } else {
-          targetRow -= 1;
-          targetCol = bounds.maxCol;
-        }
+    let targetCol = col + (isBackward ? -1 : 1);
+    let canMove = true;
+    if (!isBackward && targetCol > maxCol) {
+      targetRow += 1;
+      targetCol = 0;
+    } else if (isBackward && targetCol < 0) {
+      if (targetRow <= TOP_ROW) {
+        canMove = false;
+      } else {
+        targetRow -= 1;
+        targetCol = maxCol;
       }
     }
     cell.blur();
@@ -2062,13 +2450,6 @@ document.addEventListener('keydown', e => {
     } else {
       setSingleSelection(cell);
     }
-  }
-  if (editingCell && e.key === 'Escape') {
-    // textContent (not innerText) so newlines are restored as text, not <br>.
-    e.preventDefault(); editingCell.textContent = originalCellValue; editingCell.blur();
-  }
-  if (!editingCell && e.key === 'Escape') {
-    clearSelection();
   }
 });
 
@@ -2114,6 +2495,7 @@ const selectAllCells = () => {
     cell.classList.add('selected');
     currentSelection.push(cell);
   });
+  selectionKind = 'all';
   selectAllSelection = currentSelection;
   selectAllLength = currentSelection.length;
   queueModernStatusUpdate();
@@ -2224,7 +2606,7 @@ const insertNewlineAtCaret = cell => {
   return true;
 };
 
-const editCell = (cell, event, mode = 'detail') => {
+const editCell = (cell, event, mode = 'detail', options = {}) => {
   if(editingCell === cell) return;
   if(editingCell) editingCell.blur();
   cell.classList.remove('selected');
@@ -2246,6 +2628,7 @@ const editCell = (cell, event, mode = 'detail') => {
     cell.removeEventListener('blur', onBlurHandler);
   };
   cell.addEventListener('blur', onBlurHandler);
+  if (options.keepCaret) return;
   event ? setCursorAtPoint(cell, event.clientX, event.clientY) : setCursorToEnd(cell);
 };
 
@@ -2276,7 +2659,7 @@ table.addEventListener('dblclick', e => {
     }
   }
   const target = getCellTarget(e.target);
-  if (!target) return;
+  if (!target || !isDataCell(target)) return;
   clearSelection();
   editCell(target, e);
 });
@@ -2286,6 +2669,7 @@ const copySelectionToClipboard = () => {
   // Select-all only covers rendered chunks; let the extension copy every row.
   if (typeof isSelectAllActive === 'function' && isSelectAllActive()) {
     vscode.postMessage({ type: 'copyAll', filter: typeof quickFilterQuery === 'string' ? quickFilterQuery : '' });
+    if (typeof showToast === 'function') showToast(t('copiedAll'));
     return;
   }
 
@@ -2298,7 +2682,7 @@ const copySelectionToClipboard = () => {
   const minCol = Math.min(...coords.map(c => c.col)), maxCol = Math.max(...coords.map(c => c.col));
   const rows = [];
   for(let r = minRow; r <= maxRow; r++){
-    const tag = hasHeader && r === 0 ? 'th' : 'td';
+    const tag = r === HEADER_ROW ? 'th' : 'td';
     // Like spreadsheets, skip rows hidden by the quick filter.
     const rowEl = table.querySelector(tag + '[data-row="'+r+'"]')?.closest?.('tr');
     if (rowEl && rowEl.style.display === 'none') continue;
@@ -2312,6 +2696,49 @@ const copySelectionToClipboard = () => {
     rows.push(rowVals.join('\t'));
   }
   vscode.postMessage({ type: 'copyToClipboard', text: rows.join('\n') });
+  if (typeof showToast === 'function') showToast(t('copied', { n: coords.length }));
+};
+
+// Clear the selected data cells in one undoable edit.
+const clearSelectedCells = () => {
+  if (isSelectAllActive()) {
+    vscode.postMessage({ type: 'clearAll', filter: quickFilterQuery });
+    return;
+  }
+  const cells = currentSelection.filter(cell => isDataCell(cell) && !isRowHidden(cell) && cell.textContent !== '');
+  if (!cells.length) return;
+  const replacements = cells.map(cell => {
+    const { row, col } = getCellCoords(cell);
+    cell.textContent = '';
+    return { row, col, value: '' };
+  });
+  vscode.postMessage({ type: 'replaceCells', replacements });
+  showToast(t('cleared', { n: replacements.length }));
+  queueModernStatusUpdate();
+};
+
+const cutSelection = () => {
+  if (!currentSelection.some(isDataCell)) return;
+  const selectAll = isSelectAllActive();
+  copySelectionToClipboard();
+  if (selectAll) {
+    vscode.postMessage({ type: 'clearAll', filter: quickFilterQuery });
+  } else {
+    clearSelectedCells();
+  }
+};
+
+// Menu-driven paste: the webview cannot read the clipboard itself, so the
+// extension reads it and applies the same paste logic as Ctrl+V.
+const pasteFromExtensionClipboard = () => {
+  const anchor = getPasteAnchorCoords();
+  if (!anchor) return;
+  vscode.postMessage({
+    type: 'pasteFromClipboard',
+    anchorRow: anchor.row,
+    anchorCol: anchor.col,
+    selection: getDataSelectionBounds() || undefined
+  });
 };
 
 window.addEventListener('message', event => {
@@ -2319,34 +2746,13 @@ window.addEventListener('message', event => {
   if (message.type === 'uiCommand') {
     if (message.command === 'find') openFindReplace(false);
     if (message.command === 'replace') openFindReplace(true);
-    if (message.command === 'dataTools') document.getElementById('toolbarTools')?.click();
-    if (message.command === 'validate') document.getElementById('toolbarValidate')?.click();
-    if (message.command === 'filter') document.getElementById('toolbarFilter')?.click();
+    if (message.command === 'dataTools') showToolsPanel();
+    if (message.command === 'validate') showValidatePanel();
+    if (message.command === 'filter') (activePanel === 'filter' ? closePanel() : showFilterPanel());
   } else if (message.type === 'dataToolPreview') {
-    const changed = Number(message.changedCells) || 0;
-    const removed = Number(message.removedRows) || 0;
-    const summary = `${changed} cells will change; ${removed} rows will be removed.`;
-    if (panelResults) panelResults.textContent = summary;
-    if ((changed || removed) && window.confirm(`${summary}\n\nApply this change? / この変更を適用しますか？`)) {
-      vscode.postMessage({ type: 'applyDataTool', request: message.request });
-    }
+    renderToolPreview(message);
   } else if (message.type === 'validationResult') {
-    const issues = Array.isArray(message.issues) ? message.issues : [];
-    if (panelResults) {
-      panelResults.replaceChildren();
-      const summary = document.createElement('p');
-      summary.textContent = issues.length ? `${issues.length} issue(s) found.` : 'No issues found. / 問題はありません。';
-      panelResults.appendChild(summary);
-      if (issues.length) {
-        const list = document.createElement('ul');
-        issues.slice(0, 200).forEach(issue => {
-          const item = document.createElement('li');
-          item.textContent = String(issue.message || 'Validation issue');
-          list.appendChild(item);
-        });
-        panelResults.appendChild(list);
-      }
-    }
+    renderValidation(Array.isArray(message.issues) ? message.issues : []);
   } else if(message.type === 'focus'){
     if (anchorCell) {
       try { anchorCell.focus({ preventScroll: true }); } catch { try { anchorCell.focus(); } catch {} }
@@ -2471,7 +2877,7 @@ const maybeResumePendingEdit = () => {
   try {
     const st = vscode.getState() || {};
     if (st && typeof st.anchorRow === 'number' && typeof st.anchorCol === 'number' && st.pendingEdit === 'detail') {
-      const tag = (hasHeader && st.anchorRow === 0 ? 'th' : 'td');
+      const tag = (st.anchorRow === HEADER_ROW ? 'th' : 'td');
       const sel = table.querySelector(`${tag}[data-row="${st.anchorRow}"][data-col="${st.anchorCol}"]`);
       if (sel) {
         editCell(sel, undefined, 'detail');
@@ -2489,11 +2895,25 @@ setTimeout(maybeResumePendingEdit, 0);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(maybeResumePendingEdit, 0); });
 window.addEventListener('focus', () => { setTimeout(maybeResumePendingEdit, 0); }, { passive: true });
 
-document.addEventListener('keydown', e => {
-  if (findReplaceState.open) {
-    return;
+// Restore panels, filter and find after the full re-render that follows a
+// structural edit, so the user's working context is not lost.
+const restoreUiState = () => {
+  const ui = readUiState();
+  if (quickFilterQuery) applyQuickFilter();
+  if (ui.find && ui.find.open) {
+    findInput.value = String(ui.find.query || '');
+    replaceInput.value = String(ui.find.replacement || '');
+    findReplaceState.matchCase = !!ui.find.matchCase;
+    findReplaceState.wholeWord = !!ui.find.wholeWord;
+    findReplaceState.regex = !!ui.find.regex;
+    findReplaceState.preserveCase = !!ui.find.preserveCase;
+    openFindReplace(!!ui.find.replaceExpanded, false);
   }
-  if(!editingCell && e.key === 'Escape'){
-    clearSelection();
-  }
-});
+  const notice = ui.notice ? String(ui.notice) : '';
+  if (notice) writeUiState({ notice: '' });
+  if (ui.panel === 'filter') showFilterPanel(false);
+  else if (ui.panel === 'tools') showToolsPanel(notice);
+  else if (ui.panel === 'validate') showValidatePanel();
+  else if (notice) showToast(notice);
+};
+restoreUiState();

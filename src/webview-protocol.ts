@@ -25,6 +25,8 @@ export const webviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('save') }),
   z.object({ type: z.literal('copyToClipboard'), text: z.string().max(100_000_000) }),
   z.object({ type: z.literal('copyAll'), filter: z.string().max(16_384).optional() }),
+  z.object({ type: z.literal('clearAll'), filter: z.string().max(16_384).optional() }),
+  z.object({ type: z.literal('pasteFromClipboard'), anchorRow: index, anchorCol: index, selection }),
   z.object({ type: z.enum(['insertColumn', 'deleteColumn', 'insertRow', 'deleteRow']), index }),
   z.object({ type: z.enum(['insertColumns', 'insertRows']), index, count: index.max(100_000) }),
   z.object({ type: z.enum(['deleteColumns', 'deleteRows']), indices: z.array(index).max(100_000) }),
@@ -39,7 +41,16 @@ export const webviewMessageSchema = z.discriminatedUnion('type', [
       value: z.string().optional()
     })
   }),
-  z.object({ type: z.enum(['validateData', 'openTextView', 'undo', 'redo', 'cycleTheme']) })
+  z.object({ type: z.enum([
+    'validateData',
+    'openTextView',
+    'undo',
+    'redo',
+    'cycleTheme',
+    'toggleHeader',
+    'toggleSerialIndex',
+    'changeSeparator'
+  ]) })
 ]);
 
 export type WebviewMessage = z.infer<typeof webviewMessageSchema>;

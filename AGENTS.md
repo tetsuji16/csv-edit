@@ -49,6 +49,14 @@ npm test
 - When adding/changing commands or settings, update both `package.json` contributions and `README.md` in the same change.
 - For any user-visible behavior update, include a concise note in PR/test plan describing how it was validated.
 
+## Trying the Webview Without VS Code
+- `npm run harness -- sample.csv` serves the real provider + webview against a
+  mocked VS Code API at http://localhost:5317/ (sandboxed like VS Code: no
+  `alert/confirm/prompt`, strict CSP). `/doc`, `/clipboard`, and `/log`
+  expose the document text, clipboard, and message log.
+- `npm run test:e2e` drives the harness with headless Chrome/Edge using real
+  keyboard, mouse, and IME input. Run it after webview changes.
+
 ## Webview Change Policy
 - Changes to `media/main.js`, webview message contracts, or rendered table HTML should include/update tests in `src/test`.
 - Prefer tests that verify invariants and edge cases (selection/edit interactions, chunking behavior, escaping/linkification safety).

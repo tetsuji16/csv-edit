@@ -19,7 +19,10 @@ const runCopy = (
     currentSelection: selection,
     getCellCoords: (cell: unknown) => cell,
     hasHeader: true,
+    HEADER_ROW: 0,
     CSV_SEPARATOR: ',',
+    t: (key: string) => key,
+    showToast: () => {},
     table: { querySelector: (selector: string) => {
       const row = Number(/data-row="(\d+)"/.exec(selector)![1]);
       const col = Number(/data-col="(\d+)"/.exec(selector)?.[1] ?? 0);
