@@ -700,11 +700,13 @@ class CsvEditorController {
     }
   }
 
-  private parseClipboardMatrix(text: string): string[][] {
+  private static parseClipboardMatrix(text: string): string[][] {
     if (!text || text.length === 0) {
       return [];
     }
-    const parsed = Papa.parse(text, { dynamicTyping: false, delimiter: '' });
+    // The clipboard is always TSV (matching our copy output and spreadsheet
+    // apps); delimiter auto-detection would split values such as "a, b".
+    const parsed = Papa.parse(text, { dynamicTyping: false, delimiter: '\t' });
     const rowsRaw = Array.isArray(parsed.data) ? parsed.data : [];
     const matrix: string[][] = rowsRaw.map(rawRow => {
       if (Array.isArray(rawRow)) {
@@ -870,7 +872,7 @@ class CsvEditorController {
     if (!Number.isInteger(anchorRow) || anchorRow < 0 || !Number.isInteger(anchorCol) || anchorCol < 0) {
       return;
     }
-    const matrix = this.parseClipboardMatrix(text);
+    const matrix = CsvEditorController.parseClipboardMatrix(text);
     if (!matrix.length || !matrix[0].length) {
       return;
     }
@@ -2921,6 +2923,9 @@ export class CsvEditorProvider implements vscode.CustomTextEditorProvider {
     },
     escapeCss(text: string): string {
       return new (CsvEditorController as any)({} as any).escapeCss(text);
+    },
+    parseClipboardMatrix(text: string): string[][] {
+      return (CsvEditorController as any).parseClipboardMatrix(text);
     },
     computePastePlan(
       matrix: string[][],

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Always parse pasted clipboard text as TSV so values containing commas or semicolons are no longer split across cells.
+
 ## 0.1.14 — 2026-10-10
 
 - Copy selected cells as escaped TSV, preserving multiline values, quotes, tabs, trailing empty cells, and whitespace.

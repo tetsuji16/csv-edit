@@ -274,4 +274,11 @@ describe('CsvEditorProvider utility methods', () => {
     assert.strictEqual(meta.nextChunkStart, 80);
     assert.strictEqual(meta.hasRemoteChunks, true);
   });
+
+  it('parseClipboardMatrix always treats clipboard text as TSV', () => {
+    const parse = CsvEditorProvider.__test.parseClipboardMatrix;
+    assert.deepStrictEqual(parse('Hello, world'), [['Hello, world']]);
+    assert.deepStrictEqual(parse('a,b\tc\nx;y\tz'), [['a,b', 'c'], ['x;y', 'z']]);
+    assert.deepStrictEqual(parse('"multi\nline"\t"say ""hi"""\n1\t'), [['multi\nline', 'say "hi"'], ['1', '']]);
+  });
 });
