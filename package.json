@@ -16,7 +16,7 @@
     "url": "https://github.com/sponsors/tetsuji16"
   },
   "license": "MIT",
-  "version": "0.1.15",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.130.0",
     "node": ">=20"
@@ -335,7 +335,9 @@
     "lint": "eslint \"src/**/*.ts\"",
     "package": "npm run bundle && vsce package --no-dependencies",
     "test": "npm run compile && node scripts/run-tests.cjs",
-    "verify": "npm run lint && npm test"
+    "verify": "npm run lint && npm test",
+    "test:e2e": "npm run compile && node scripts/e2e-smoke.cjs",
+    "harness": "npm run compile && node scripts/webview-harness.cjs"
   },
   "dependencies": {
     "font-list": "^1.5.1",

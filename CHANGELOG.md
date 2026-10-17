@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0 — 2026-10-17
+
+A usability release based on an adversarial review of everyday editing.
+
+Fixed
+- The Filter, Clean and transform, and Validate panels were invisible (their
+  layout rules had been lost), so these features could not be used.
+- Clean and transform never applied anything: its confirmation and value
+  prompts used browser dialogs, which VS Code webviews block. It is now an
+  in-panel flow with a preview and an Apply button.
+- Bulk tools no longer rewrite the header row or hidden preamble rows (for
+  example UPPERCASE renaming your columns).
+- Typing with an input method (IME), such as Japanese, now edits the selected
+  cell directly instead of being lost.
+- Pressing Escape while the find widget is open now cancels the cell edit first.
+- Deleting a selection is now one undoable change instead of one per cell.
+- Files whose columns are all text now get their header row detected, and the
+  header toggle always switches what you see.
+- The value bar no longer hides the second and later lines of multi-line cells.
+- Validation compares rows with the typical row width (one row with an extra
+  field is reported instead of every other row) and ignores hidden rows.
+- The row count in the status bar excludes the header row.
+- Removed non-functional "Find in selection" and "Match diacritics" items.
+- Cell values are no longer written to the extension log on every edit.
+
+Added
+- English and Japanese interface following the VS Code display language.
+- Sum, Average, and Count of numeric selections in the status bar.
+- Cut (Ctrl+X), F2, Home/End, Ctrl+Home/End, PageUp/PageDown, and Alt+Enter
+  line breaks; arrow keys skip rows hidden by the filter.
+- A context menu with cut, copy, paste, clear, sort, and insert/delete commands
+  that act on every selected row or column; keyboard navigable.
+- Address box jump: type a row number (or `row,column`) and press Enter.
+- Header row, row numbers, and delimiter controls in the **…** menu; click the
+  delimiter in the status bar to change it.
+- Clean and transform can target only the selected columns and shows
+  before → after samples.
+- Validation issues are clickable and jump to the cell.
+- The filter, find, and open panel survive structural edits (insert, delete,
+  sort, apply) instead of resetting.
+- A browser harness and an end-to-end smoke test for development.
+
 ## 0.1.15 — 2026-10-17
 
 - Always parse pasted clipboard text as TSV so values containing commas or semicolons are no longer split across cells.
