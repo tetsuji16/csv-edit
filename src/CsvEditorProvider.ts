@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { applyDataTool, DataToolOptions, DataToolRequest, validateCsvRows } from './data-tools';
+import { buildCopyAllRows, rowsToClipboardTsv } from './clipboard-tsv';
 import { CsvDocumentModel } from './csv-document-model';
 import { parseWebviewMessage } from './webview-protocol';
 
@@ -159,6 +160,9 @@ class CsvEditorController {
         case 'copyToClipboard':
           await vscode.env.clipboard.writeText(e.text);
           console.log('CSV: Copied to clipboard');
+          break;
+        case 'copyAll':
+          await this.copyAllToClipboard(e.filter ?? '');
           break;
         case 'insertColumn':
           await this.enqueueDocumentMutation(() => this.insertColumn(e.index));
@@ -552,6 +556,15 @@ class CsvEditorController {
     } finally {
       this.isUpdatingDocument = false;
     }
+  }
+
+  // Select-all only covers rendered chunks in the webview, so build the copy
+  // from the parsed document to include rows that have not been loaded yet.
+  private async copyAllToClipboard(filter: string): Promise<void> {
+    const rows = this.trimTrailingEmptyRows(this.parseCurrentRows());
+    const hiddenRows = this.getHiddenRows();
+    const visible = buildCopyAllRows(rows, hiddenRows, this.getEffectiveHeader(rows, hiddenRows), filter);
+    await vscode.env.clipboard.writeText(rowsToClipboardTsv(visible));
   }
 
   private async validateData(): Promise<void> {

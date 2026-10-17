@@ -24,6 +24,7 @@ export const webviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('findMatches'), requestId: z.number().int(), query: z.string(), options: z.record(z.string(), z.unknown()).optional() }),
   z.object({ type: z.literal('save') }),
   z.object({ type: z.literal('copyToClipboard'), text: z.string().max(100_000_000) }),
+  z.object({ type: z.literal('copyAll'), filter: z.string().max(16_384).optional() }),
   z.object({ type: z.enum(['insertColumn', 'deleteColumn', 'insertRow', 'deleteRow']), index }),
   z.object({ type: z.enum(['insertColumns', 'insertRows']), index, count: index.max(100_000) }),
   z.object({ type: z.enum(['deleteColumns', 'deleteRows']), indices: z.array(index).max(100_000) }),

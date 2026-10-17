@@ -174,21 +174,37 @@ document.getElementById('toolbarFilter')?.addEventListener('click', () => {
   if (panelResults) {
     panelResults.innerHTML = '<p><input id="quickFilterInput" type="search" placeholder="Contains…" aria-label="Filter rows" style="width:100%;box-sizing:border-box;padding:8px"></p><p id="quickFilterCount"></p>';
     const input = document.getElementById('quickFilterInput');
+    if (input) input.value = quickFilterQuery;
     input?.addEventListener('input', () => {
-      const query = input.value.toLocaleLowerCase();
-      let shown = 0;
-      table.querySelectorAll('tbody tr').forEach(row => {
-        const visible = !query || row.textContent.toLocaleLowerCase().includes(query);
-        row.style.display = visible ? '' : 'none';
-        if (visible) shown++;
-      });
-      document.getElementById('quickFilterCount').textContent = `${shown} visible rows`;
-      if (visibleStatus) visibleStatus.textContent = query ? `${shown} visible` : '';
-      updateModernStatus();
+      quickFilterQuery = input.value;
+      applyQuickFilter();
     });
     input?.focus();
   }
 });
+
+// Quick filter state. Matching uses data cells only (not the serial index) so
+// the extension-side "copy all" can apply the same rule to unloaded rows.
+let quickFilterQuery = '';
+const applyQuickFilter = () => {
+  const query = quickFilterQuery.toLocaleLowerCase();
+  let shown = 0;
+  table.querySelectorAll('tbody tr').forEach(row => {
+    const text = Array.from(row.querySelectorAll('td[data-col]'))
+      .filter(cell => cell.getAttribute('data-col') !== '-1')
+      .map(cell => cell.textContent)
+      .join('');
+    const visible = !query || text.toLocaleLowerCase().includes(query);
+    row.style.display = visible ? '' : 'none';
+    if (visible) shown++;
+  });
+  const count = document.getElementById('quickFilterCount');
+  if (count) count.textContent = `${shown} visible rows`;
+  if (visibleStatus) visibleStatus.textContent = query ? `${shown} visible` : '';
+  updateModernStatus();
+};
+// Rows appended by chunk loading must honour an active filter too.
+window.addEventListener('csvChunkLoaded', () => { if (quickFilterQuery) applyQuickFilter(); });
 
 const restoreFormulaValue = () => {
   if (formulaInput) formulaInput.value = formulaOriginalValue;
@@ -2086,12 +2102,20 @@ document.addEventListener('paste', e => {
   });
 });
 
+// Remembers the selection array created by select-all; any later selection
+// change replaces or grows the array, which invalidates it.
+let selectAllSelection = null, selectAllLength = 0;
+const isSelectAllActive = () => selectAllSelection !== null &&
+  currentSelection === selectAllSelection && currentSelection.length === selectAllLength;
+
 const selectAllCells = () => {
   clearSelection();
   table.querySelectorAll('td[data-col], th[data-col]').forEach(cell => {
     cell.classList.add('selected');
     currentSelection.push(cell);
   });
+  selectAllSelection = currentSelection;
+  selectAllLength = currentSelection.length;
   queueModernStatusUpdate();
 };
 
@@ -2259,6 +2283,11 @@ table.addEventListener('dblclick', e => {
 
 const copySelectionToClipboard = () => {
   if (currentSelection.length === 0) return;
+  // Select-all only covers rendered chunks; let the extension copy every row.
+  if (typeof isSelectAllActive === 'function' && isSelectAllActive()) {
+    vscode.postMessage({ type: 'copyAll', filter: typeof quickFilterQuery === 'string' ? quickFilterQuery : '' });
+    return;
+  }
 
   // Only copy real data/header columns; skip serial index column (col === -1)
   const coords = currentSelection

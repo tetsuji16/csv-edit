@@ -37,3 +37,9 @@ test('accepts a realistic (in-bounds) index', () => {
   const msg = parseWebviewMessage({ type: 'insertRow', index: 5 });
   assert.deepEqual(msg, { type: 'insertRow', index: 5 });
 });
+
+test('accepts copyAll with an optional filter and rejects non-string filters', () => {
+  assert.deepEqual(parseWebviewMessage({ type: 'copyAll' }), { type: 'copyAll' });
+  assert.deepEqual(parseWebviewMessage({ type: 'copyAll', filter: 'abc' }), { type: 'copyAll', filter: 'abc' });
+  assert.equal(parseWebviewMessage({ type: 'copyAll', filter: 42 }), undefined);
+});

@@ -5,6 +5,8 @@
 - Always parse pasted clipboard text as TSV so values containing commas or semicolons are no longer split across cells.
 - Keep newlines when cancelling a cell edit with Escape, and show exact multiline/whitespace header values in the formula bar.
 - Exclude rows hidden by the quick filter when copying a selection.
+- Copy after Select All now includes every row of large files, not just the chunks loaded so far.
+- Quick filter matches cell values only (no longer the row number) and also filters rows loaded later.
 
 ## 0.1.14 — 2026-10-10
 
