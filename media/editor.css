@@ -15,6 +15,11 @@
 .codicon-close::before { content: '\ea76'; }
 .codicon-replace::before { content: '\eb3d'; }
 .codicon-replace-all::before { content: '\eb3c'; }
+.codicon-add::before { content: '\ea60'; }
+.codicon-discard::before { content: '\eae2'; }
+.codicon-redo::before { content: '\ebb0'; }
+.codicon-filter::before { content: '\eaf1'; }
+.codicon-check::before { content: '\eab2'; }
 
 :root {
   --csv-hover: var(--vscode-toolbar-hoverBackground, color-mix(in srgb, var(--csv-text) 8%, transparent));
@@ -115,6 +120,8 @@ body {
   box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28));
 }
 .command-menu button {
+  display: flex;
+  align-items: center;
   width: 100%;
   height: 26px;
   padding: 0 8px;
@@ -132,13 +139,25 @@ body {
   color: var(--vscode-menu-selectionForeground, var(--csv-text));
   outline: none;
 }
+.command-menu button[role="menuitemcheckbox"]::before {
+  content: '';
+  width: 18px;
+  margin-left: -4px;
+  font: normal normal normal 14px/1 codicon;
+}
+.command-menu button[role="menuitemcheckbox"][aria-checked="true"]::before { content: '\eab2'; }
+.command-menu { width: 250px; max-height: calc(100vh - 40px); overflow: auto; }
+.command-button .command-label { line-height: 1; }
+.command-button[aria-pressed="true"] { background: var(--csv-active); box-shadow: inset 0 -2px 0 var(--csv-accent); }
 .menu-separator { display: block; height: 1px; margin: 4px; background: var(--vscode-menu-separatorBackground, var(--csv-border)); }
 
 .cell-bar {
   min-width: 0;
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 26px 26px;
+  grid-template-columns: minmax(96px, 160px) minmax(0, 1fr) 26px 26px;
   align-items: stretch;
+  position: relative;
+  z-index: 40;
   padding: 2px 6px;
   background: var(--csv-bg);
   border-bottom: 1px solid var(--csv-border);
@@ -156,7 +175,9 @@ body {
   padding: 0 6px;
   border-radius: 2px 0 0 2px;
   color: var(--csv-muted);
-  text-align: center;
+  text-align: left;
+  text-overflow: ellipsis;
+  user-select: text;
   font-variant-numeric: tabular-nums;
 }
 .cell-input {
@@ -257,6 +278,9 @@ body {
 }
 .table-container td.editing,
 .table-container th.editing {
+  user-select: text;
+  white-space: pre-wrap !important;
+  overflow: visible !important;
   z-index: 25;
   background: var(--csv-bg) !important;
   box-shadow: inset 0 0 0 1px var(--csv-accent) !important;
@@ -275,12 +299,31 @@ body {
   font-size: 0.78em !important;
 }
 .csv-status span { padding: 0 7px; border-right: 1px solid color-mix(in srgb, currentColor 20%, transparent); white-space: nowrap; }
-.csv-status span:empty { display: none; }
+.csv-status span:empty:not(.status-spacer) { display: none; }
 .csv-status span:first-child { padding-left: 0; }
 .csv-status .status-spacer { flex: 1; border-right: 0; }
+.csv-status .status-button {
+  height: 100%;
+  padding: 0 7px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.csv-status .status-button:hover { background: var(--vscode-statusBarItem-hoverBackground, var(--csv-hover)); }
+.csv-status #aggregateStatus { font-variant-numeric: tabular-nums; }
 
 .csv-panel {
-  top: 32px !important;
+  position: fixed;
+  right: 0;
+  z-index: 1100;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--csv-text);
+  top: 62px !important;
   bottom: 22px !important;
   width: min(340px, 92vw) !important;
   padding: 0 !important;
@@ -288,6 +331,76 @@ body {
   background: var(--vscode-sideBar-background, var(--csv-surface)) !important;
   box-shadow: -4px 0 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.2)) !important;
 }
+.csv-panel.open { display: flex; }
+.panel-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px 14px; }
+.panel-body p { margin: 0 0 10px; line-height: 1.45; }
+.panel-body .panel-hint { color: var(--csv-muted); font-size: 0.9em; }
+.panel-body .panel-field { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.panel-body .panel-field > span { color: var(--csv-muted); font-size: 0.9em; }
+.panel-body input[type="search"],
+.panel-body input[type="text"],
+.panel-body select {
+  width: 100%;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid var(--csv-control-border);
+  border-radius: 2px;
+  background: var(--csv-control);
+  color: var(--vscode-input-foreground, var(--csv-text));
+  font: inherit;
+  user-select: text;
+}
+.panel-body input:focus,
+.panel-body select:focus { outline: 1px solid var(--csv-accent); outline-offset: -1px; }
+.panel-body .tool-list { display: grid; grid-template-columns: 1fr; gap: 2px; margin: 0 0 10px; }
+.panel-body .tool-list button {
+  min-height: 26px !important;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--csv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-body .tool-list button:hover,
+.panel-body .tool-list button:focus-visible { background: var(--csv-hover); outline: none; }
+.panel-body .tool-list button[aria-pressed="true"] { background: var(--csv-selection); border-color: var(--csv-accent); }
+.panel-body .button-row { display: flex; gap: 6px; margin: 4px 0 10px; }
+.panel-body .primary-button,
+.panel-body .secondary-button {
+  min-height: 26px !important;
+  padding: 2px 12px;
+  border: 1px solid transparent;
+  border-radius: 2px !important;
+  font: inherit;
+  cursor: pointer;
+}
+.panel-body .primary-button { background: var(--vscode-button-background, var(--csv-accent)); color: var(--vscode-button-foreground, #fff); }
+.panel-body .primary-button:hover { filter: brightness(1.1); }
+.panel-body .primary-button[disabled] { opacity: 0.5; cursor: default; filter: none; }
+.panel-body .secondary-button { background: var(--vscode-button-secondaryBackground, var(--csv-hover)); color: var(--vscode-button-secondaryForeground, var(--csv-text)); }
+.panel-body .preview-list,
+.panel-body .issue-list { margin: 0 0 10px; padding: 0; list-style: none; }
+.panel-body .preview-list li { padding: 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--csv-border) 60%, transparent); font-size: 0.92em; overflow-wrap: anywhere; white-space: pre-wrap; }
+.panel-body .preview-list del { color: var(--vscode-errorForeground, #f14c4c); text-decoration: line-through; }
+.panel-body .preview-list ins { color: var(--vscode-gitDecoration-addedResourceForeground, #73c991); text-decoration: none; }
+.panel-body .preview-list .cell-ref { color: var(--csv-muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.panel-body .issue-list button {
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-left: 2px solid var(--vscode-editorWarning-foreground, #cca700);
+  background: transparent;
+  color: var(--csv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-body .issue-list li + li { margin-top: 2px; }
+.panel-body .issue-list button:hover,
+.panel-body .issue-list button:focus-visible { background: var(--csv-hover); outline: none; }
+.panel-body .status-ok { color: var(--vscode-testing-iconPassed, #73c991); }
 .panel-heading {
   display: flex;
   align-items: center;
@@ -442,7 +555,10 @@ body {
 #findReplaceWidget .fr-overflow-item:hover { background: var(--csv-hover); }
 
 #contextMenu {
-  position: absolute;
+  position: fixed;
+  min-width: 200px;
+  padding: 4px;
+  border-radius: 3px;
   display: none;
   z-index: 10000;
   border: 1px solid var(--vscode-menu-border, var(--csv-border)) !important;
@@ -450,15 +566,47 @@ body {
   color: var(--vscode-menu-foreground, var(--csv-text)) !important;
   box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28));
 }
-#contextMenu div { padding: 4px 12px !important; cursor: pointer; }
-#contextMenu div:hover { background: var(--vscode-menu-selectionBackground, var(--csv-hover)) !important; color: var(--vscode-menu-selectionForeground, var(--csv-text)) !important; }
+#contextMenu .menu-item { display: flex; align-items: center; gap: 16px; padding: 3px 10px !important; border-radius: 2px; cursor: pointer; white-space: nowrap; }
+#contextMenu .menu-item kbd,
+.command-menu kbd { margin-left: auto; padding-left: 16px; color: var(--csv-muted); font: inherit; font-size: 0.9em; }
+#contextMenu .menu-separator { height: 1px; margin: 4px 2px; background: var(--vscode-menu-separatorBackground, var(--csv-border)); }
+#contextMenu .menu-item:hover,
+#contextMenu .menu-item.focused { background: var(--vscode-menu-selectionBackground, var(--csv-hover)) !important; color: var(--vscode-menu-selectionForeground, var(--csv-text)) !important; }
 
 @media (max-width: 640px) {
   .document-context { display: none; }
-  .command-button { width: 28px; padding: 0; overflow: hidden; font-size: 0; }
-  .command-button span { font-size: 15px; }
-  .command-button.icon-only { font-size: 16px; }
+  .command-button { width: 28px; padding: 0; }
+  .command-button .command-label { display: none; }
   .command-separator { margin: 0 1px; }
-  .cell-bar { grid-template-columns: 64px minmax(0, 1fr) 26px 26px; }
+  .cell-bar { grid-template-columns: 88px minmax(0, 1fr) 26px 26px; }
+  .csv-status #aggregateStatus { display: none; }
   .csv-status #visibleStatus { display: none; }
+}
+
+/* Multi-line values: the value bar grows while focused and otherwise shows a
+   "+N" badge so hidden lines are never a surprise. */
+.cell-bar { grid-template-areas: "address input cancel apply"; }
+.cell-address { grid-area: address; }
+.cell-input { grid-area: input; }
+#formulaCancel { grid-area: cancel; }
+#formulaApply { grid-area: apply; }
+.cell-input.expanded { align-self: start; max-height: 40vh; overflow: auto; box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28)); }
+.cell-more {
+  grid-area: input;
+  align-self: center;
+  justify-self: end;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--vscode-badge-background, var(--csv-hover));
+  color: var(--vscode-badge-foreground, var(--csv-text));
+  font-size: 0.8em;
+  line-height: 16px;
+  pointer-events: none;
+}
+.cell-more:empty { display: none; }
+
+/* Keep the grid usable beside an open side panel on wide editors. */
+@media (min-width: 760px) {
+  body.panel-open .table-container { margin-right: min(340px, 92vw); width: auto; }
 }

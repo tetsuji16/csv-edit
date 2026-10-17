@@ -42,7 +42,7 @@ test('VS Code styling maximizes grid space and uses workbench theme tokens', () 
 });
 
 test('status updates use document metadata rather than scanning every rendered cell', () => {
-  assert.match(webview, /root\?\.dataset\?\.rowcount/);
+  assert.match(webview, /root\?\.dataset\?\.datarowcount/);
   assert.match(webview, /root\?\.dataset\?\.columncount/);
   assert.doesNotMatch(webview, /new Set\(Array\.from\(table\.querySelectorAll\('\[data-row\]'\)\)/);
 });
@@ -67,10 +67,19 @@ test('CSS lives in media/editor.css, not duplicated in the provider <style>', ()
 test('bulk data tools use preview and explicit apply messages', () => {
   assert.match(webview, /type: 'previewDataTool'/);
   assert.match(webview, /type: 'applyDataTool'/);
-  assert.match(webview, /window\.confirm/);
+  // VS Code webviews are sandboxed without allow-modals: confirm/prompt/alert
+  // silently return null/false, so the UI must never depend on them.
+  assert.doesNotMatch(webview, /window\.(confirm|prompt|alert)\(/);
+});
+
+test('side panel is positioned and toggled by the stylesheet', () => {
+  assert.match(stylesheet, /\.csv-panel \{[\s\S]*?position: fixed;[\s\S]*?display: none;/);
+  assert.match(stylesheet, /\.csv-panel\.open \{ display: flex; \}/);
 });
 
 test('validation output is built with textContent instead of untrusted HTML', () => {
   assert.match(webview, /message\.type === 'validationResult'/);
-  assert.match(webview, /item\.textContent = String/);
+  // Panel content is created through el(), which only assigns textContent.
+  assert.match(webview, /if \(key === 'text'\) node\.textContent = value;/);
+  assert.doesNotMatch(webview, /panelBody\.innerHTML|panelResults/);
 });

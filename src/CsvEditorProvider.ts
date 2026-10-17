@@ -2,7 +2,8 @@ import Papa from 'papaparse';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { applyDataTool, DataToolOptions, DataToolRequest, validateCsvRows } from './data-tools';
-import { buildCopyAllRows, rowsToClipboardTsv } from './clipboard-tsv';
+import { buildCopyAllRows, rowMatchesQuickFilter, rowsToClipboardTsv } from './clipboard-tsv';
+import { getWebviewStrings, WebviewStrings } from './webview-i18n';
 import { CsvDocumentModel } from './csv-document-model';
 import { parseWebviewMessage } from './webview-protocol';
 
@@ -159,10 +160,26 @@ class CsvEditorController {
           break;
         case 'copyToClipboard':
           await vscode.env.clipboard.writeText(e.text);
-          console.log('CSV: Copied to clipboard');
           break;
         case 'copyAll':
           await this.copyAllToClipboard(e.filter ?? '');
+          break;
+        case 'clearAll':
+          await this.enqueueDocumentMutation(() => this.clearAll(e.filter ?? ''));
+          break;
+        case 'pasteFromClipboard': {
+          const text = await vscode.env.clipboard.readText();
+          await this.enqueueDocumentMutation(() => this.pasteCells(text, e.anchorRow, e.anchorCol, e.selection));
+          break;
+        }
+        case 'toggleHeader':
+          await this.toggleHeader();
+          break;
+        case 'toggleSerialIndex':
+          await this.toggleSerialIndex();
+          break;
+        case 'changeSeparator':
+          await this.pickSeparator();
           break;
         case 'insertColumn':
           await this.enqueueDocumentMutation(() => this.insertColumn(e.index));
@@ -504,9 +521,79 @@ class CsvEditorController {
   private getDataToolOptions(rows: string[][]): DataToolOptions {
     const hiddenRows = Math.min(Math.max(0, this.getHiddenRows()), rows.length);
     const protectedRowCount = hiddenRows + (this.getEffectiveHeader(rows, hiddenRows) ? 1 : 0);
+    // Tools must never rewrite the header (e.g. UPPERCASE) or hidden preamble rows.
     return protectedRowCount > 0
-      ? { duplicateExemptRows: Array.from({ length: protectedRowCount }, (_, index) => index) }
+      ? { protectedRows: Array.from({ length: protectedRowCount }, (_, index) => index) }
       : {};
+  }
+
+  /** Whether the grid currently treats the first visible row as a header. */
+  public isHeaderShown(): boolean {
+    const rows = this.parseCurrentRows();
+    return this.getEffectiveHeader(rows, this.getHiddenRows());
+  }
+
+  public async toggleHeader(): Promise<boolean> {
+    // Toggle what the user sees (the heuristic may already have decided), not
+    // the stored default, so the first toggle always has a visible effect.
+    const next = !this.isHeaderShown();
+    await CsvEditorProvider.setHeaderForUri(this.context, this.document.uri, next);
+    this.refreshEditorsForDocument();
+    return next;
+  }
+
+  public async toggleSerialIndex(): Promise<boolean> {
+    const next = !CsvEditorProvider.getSerialIndexForUri(this.context, this.document.uri);
+    await CsvEditorProvider.setSerialIndexForUri(this.context, this.document.uri, next);
+    this.refreshEditorsForDocument();
+    return next;
+  }
+
+  /** Offer common delimiters plus a custom entry; applies to this file only. */
+  public async pickSeparator(): Promise<void> {
+    const current = this.getSeparator();
+    const override = CsvEditorProvider.getSeparatorForUri(this.context, this.document.uri);
+    const ja = (vscode.env.language || '').toLowerCase().startsWith('ja');
+    type Pick = vscode.QuickPickItem & { value: string | undefined | null };
+    const label = (sep: string) => (sep === '\t' ? 'Tab' : sep);
+    const options: Pick[] = [
+      { label: ',', description: ja ? 'カンマ' : 'Comma', value: ',' },
+      { label: ';', description: ja ? 'セミコロン' : 'Semicolon', value: ';' },
+      { label: 'Tab', description: ja ? 'タブ' : 'Tab', value: '\t' },
+      { label: '|', description: ja ? 'パイプ' : 'Pipe', value: '|' },
+      { label: ja ? 'その他…' : 'Other…', value: null },
+      { label: ja ? '自動（設定に従う）' : 'Automatic (follow settings)', value: undefined }
+    ];
+    for (const option of options) {
+      if (option.value !== null && option.value === override) {
+        option.detail = ja ? '現在の設定' : 'Current';
+      }
+    }
+    const picked = await vscode.window.showQuickPick(options, {
+      placeHolder: ja
+        ? `このファイルの区切り文字（現在: ${label(current)}）`
+        : `Delimiter for this file (current: ${label(current)})`
+    });
+    if (!picked) {return;}
+    let next: string | undefined = picked.value ?? undefined;
+    if (picked.value === null) {
+      const typed = await vscode.window.showInputBox({
+        prompt: ja ? '区切り文字を入力（タブは \\t）' : 'Enter a delimiter (use \\t for tab)',
+        value: current === '\t' ? '\\t' : current,
+        validateInput: value => (value.length ? undefined : (ja ? '1 文字以上入力してください' : 'Enter at least one character'))
+      });
+      if (!typed) {return;}
+      next = typed === '\\t' ? '\t' : typed;
+    }
+    await CsvEditorProvider.setSeparatorForUri(this.context, this.document.uri, next);
+    this.refreshEditorsForDocument();
+  }
+
+  private refreshEditorsForDocument(): void {
+    const key = this.document.uri.toString();
+    CsvEditorProvider.editors
+      .filter(editor => editor.getDocumentUri().toString() === key)
+      .forEach(editor => editor.refresh());
   }
 
   /** Serialize structural edits while retaining the document's BOM and line ending. */
@@ -567,12 +654,50 @@ class CsvEditorController {
     await vscode.env.clipboard.writeText(rowsToClipboardTsv(visible));
   }
 
-  private async validateData(): Promise<void> {
-    const rows = this.parseCurrentRows();
-    const issues = validateCsvRows(
-      rows,
-      CsvEditorProvider.getHeaderForUri(this.context, this.document.uri)
+  // Clear every visible cell (respecting hidden rows and the quick filter) in
+  // a single undoable edit; used by Select All + Delete/Cut.
+  private async clearAll(filter: string): Promise<void> {
+    const separator = this.getSeparator();
+    const rows = this.parseCurrentRows().map(row => row.slice());
+    const hiddenRows = Math.min(Math.max(0, this.getHiddenRows()), rows.length);
+    const header = this.getEffectiveHeader(rows, hiddenRows);
+    let changed = false;
+    for (let r = hiddenRows; r < rows.length; r++) {
+      const isHeader = header && r === hiddenRows;
+      if (!isHeader && filter && !rowMatchesQuickFilter(rows[r], filter)) {continue;}
+      for (let c = 0; c < rows[r].length; c++) {
+        if (rows[r][c] !== '') {
+          rows[r][c] = '';
+          changed = true;
+        }
+      }
+    }
+    if (!changed) {return;}
+    await this.replaceDocumentText(this.serializeRows(this.trimTrailingEmptyRows(rows), separator));
+  }
+
+  private async replaceDocumentText(newText: string): Promise<void> {
+    if (newText === this.document.getText()) {return;}
+    const lastLine = Math.max(0, this.document.lineCount - 1);
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(
+      this.document.uri,
+      new vscode.Range(0, 0, lastLine, this.document.lineAt(lastLine).text.length),
+      newText
     );
+    this.isUpdatingDocument = true;
+    try {
+      await vscode.workspace.applyEdit(edit);
+      this.updateWebviewContent();
+    } finally {
+      this.isUpdatingDocument = false;
+    }
+  }
+
+  private async validateData(): Promise<void> {
+    const rows = this.trimTrailingEmptyRows(this.parseCurrentRows());
+    const hiddenRows = this.getHiddenRows();
+    const issues = validateCsvRows(rows, this.getEffectiveHeader(rows, hiddenRows), hiddenRows);
     await this.currentWebviewPanel?.webview.postMessage({ type: 'validationResult', issues });
   }
 
@@ -637,7 +762,6 @@ class CsvEditorController {
       return;
     }
 
-    console.log(`CSV: Updated row ${row + 1}, column ${col + 1} to "${value}"`);
     const config = vscode.workspace.getConfiguration('csv', this.document.uri);
     const clickableLinks = config.get<boolean>('clickableLinks', true);
     const rendered = this.formatCellContent(value ?? '', clickableLinks);
@@ -1350,7 +1474,6 @@ class CsvEditorController {
 
     this.isUpdatingDocument = false;
     this.updateWebviewContent();
-    console.log(`CSV: Sorted column ${index + 1} (${ascending ? 'A-Z' : 'Z-A'})`);
   }
 
   private async insertRow(index: number) {
@@ -1643,7 +1766,10 @@ class CsvEditorController {
       mouseWheelZoomEnabled,
       mouseWheelZoomInvert,
       rowCount: data.length,
-      columnCount
+      dataRowCount: Math.max(0, data.length - Math.min(hiddenRows, data.length) - (treatHeader ? 1 : 0)),
+      columnCount,
+      headerShown: treatHeader,
+      serialShown: addSerialIndex
     });
   }
 
@@ -1888,7 +2014,22 @@ class CsvEditorController {
     const headerTypes = Array.from({ length: numColumns }, (_, i) => this.estimateColumnDataType([headerRow[i] || '']));
 
     const matches = headerTypes.every((t, i) => t === bodyTypes[i]);
-    return !matches;
+    if (!matches) {return true;}
+    return CsvEditorController.looksLikeTextHeader(headerRow, body);
+  }
+
+  // All-text tables (name,city,…) defeat the type comparison above. Treat the
+  // first row as a header when its labels are present, unique, and never
+  // repeated as a value in their own column — the usual shape of a header.
+  private static looksLikeTextHeader(headerRow: string[], body: string[][]): boolean {
+    const labels = headerRow.map(value => (value ?? '').trim());
+    if (!labels.length || labels.some(label => label === '')) {return false;}
+    if (new Set(labels.map(label => label.toLocaleLowerCase())).size !== labels.length) {return false;}
+    const sample = body.length > 2000 ? body.slice(0, 2000) : body;
+    return labels.every((label, col) => {
+      const needle = label.toLocaleLowerCase();
+      return !sample.some(row => (row[col] ?? '').trim().toLocaleLowerCase() === needle);
+    });
   }
 
   private wrapHtml(args: {
@@ -1906,9 +2047,21 @@ class CsvEditorController {
     mouseWheelZoomEnabled: boolean;
     mouseWheelZoomInvert: boolean;
     rowCount: number;
+    dataRowCount: number;
     columnCount: number;
+    headerShown: boolean;
+    serialShown: boolean;
   }): string {
-    const { webview, nonce, fontFamily, fontSize, cellPadding, separator, tableHtml, chunksJson, extraColumnColorCss, nextChunkStart, hasRemoteChunks, mouseWheelZoomEnabled, mouseWheelZoomInvert, rowCount, columnCount } = args;
+    const { webview, nonce, fontFamily, fontSize, cellPadding, separator, tableHtml, chunksJson, extraColumnColorCss, nextChunkStart, hasRemoteChunks, mouseWheelZoomEnabled, mouseWheelZoomInvert, rowCount, dataRowCount, columnCount, headerShown, serialShown } = args;
+    const s: WebviewStrings = getWebviewStrings(vscode.env?.language);
+    const esc = (text: string) => this.escapeHtml(text);
+    const format = (template: string, vars: Record<string, string | number>) =>
+      template.replace(/\{(\w+)\}/g, (match, key) => (key in vars ? String(vars[key]) : match));
+    // '<' is escaped so no string can close the JSON <script> block early.
+    const stringsJson = JSON.stringify(s).replace(/</g, '\\u003c');
+    const separatorLabel = separator === '\t' ? 'TAB' : separator;
+    const themeSetting = vscode.workspace.getConfiguration('csvEdit').get<string>('theme', 'auto');
+    const themeLabel = themeSetting === 'dark' ? s.themeDark : themeSetting === 'light' ? s.themeLight : s.themeAuto;
     const themePreference = vscode.workspace.getConfiguration('csvEdit').get<'auto' | 'light' | 'dark'>('theme', 'auto');
     const isDark = themePreference === 'dark' || (
       themePreference === 'auto' &&
@@ -1972,116 +2125,114 @@ class CsvEditorController {
     <div class="csv-workbench">
       <header class="csv-commandbar" aria-label="CSV commands">
         <div class="command-primary">
-          <button id="undoButton" class="command-button icon-only" type="button" title="Undo / 元に戻す" aria-label="Undo">↶</button>
-          <button id="redoButton" class="command-button icon-only" type="button" title="Redo / やり直す" aria-label="Redo">↷</button>
+          <button id="undoButton" class="command-button icon-only" type="button" title="${esc(s.undo)} (Ctrl+Z)" aria-label="${esc(s.undo)}"><span class="codicon codicon-discard" aria-hidden="true"></span></button>
+          <button id="redoButton" class="command-button icon-only" type="button" title="${esc(s.redo)} (Ctrl+Y)" aria-label="${esc(s.redo)}"><span class="codicon codicon-redo" aria-hidden="true"></span></button>
           <span class="command-separator" aria-hidden="true"></span>
-          <button id="ribbonAddRow" class="command-button" type="button" title="Insert row below / 下に行を追加"><span aria-hidden="true">＋</span> Row</button>
-          <button id="ribbonAddColumn" class="command-button" type="button" title="Insert column right / 右に列を追加"><span aria-hidden="true">＋</span> Column</button>
+          <button id="ribbonAddRow" class="command-button" type="button" title="${esc(s.addRowTitle)}"><span class="codicon codicon-add" aria-hidden="true"></span><span class="command-label">${esc(s.addRow)}</span></button>
+          <button id="ribbonAddColumn" class="command-button" type="button" title="${esc(s.addColumnTitle)}"><span class="codicon codicon-add" aria-hidden="true"></span><span class="command-label">${esc(s.addColumn)}</span></button>
           <span class="command-separator" aria-hidden="true"></span>
-          <button id="toolbarFind" class="command-button" type="button" title="Find and replace / 検索と置換"><span class="codicon codicon-search" aria-hidden="true"></span> Find</button>
-          <button id="toolbarFilter" class="command-button" type="button" title="Filter rows / 行をフィルター"><span aria-hidden="true">▽</span> Filter</button>
+          <button id="toolbarFind" class="command-button" type="button" title="${esc(s.findTitle)}"><span class="codicon codicon-search" aria-hidden="true"></span><span class="command-label">${esc(s.find)}</span></button>
+          <button id="toolbarFilter" class="command-button" type="button" title="${esc(s.filterTitle)}" aria-pressed="false"><span class="codicon codicon-filter" aria-hidden="true"></span><span class="command-label">${esc(s.filter)}</span></button>
           <details id="commandOverflow" class="command-overflow">
-            <summary title="More actions / その他の操作" aria-label="More actions">…</summary>
+            <summary title="${esc(s.moreActions)}" aria-label="${esc(s.moreActions)}"><span class="codicon codicon-ellipsis" aria-hidden="true"></span></summary>
             <div class="command-menu" role="menu">
-              <button id="ribbonCopy" type="button" role="menuitem">Copy selection</button>
-              <button id="ribbonDeleteRow" type="button" role="menuitem">Delete row</button>
-              <button id="ribbonDeleteColumn" type="button" role="menuitem">Delete column</button>
+              <button id="ribbonCopy" type="button" role="menuitem">${esc(s.copySelection)}<kbd>Ctrl+C</kbd></button>
+              <button id="ribbonCut" type="button" role="menuitem">${esc(s.cutSelection)}<kbd>Ctrl+X</kbd></button>
+              <button id="ribbonPaste" type="button" role="menuitem">${esc(s.pasteSelection)}<kbd>Ctrl+V</kbd></button>
+              <button id="ribbonClear" type="button" role="menuitem">${esc(s.clearSelection)}<kbd>Del</kbd></button>
               <span class="menu-separator" aria-hidden="true"></span>
-              <button id="toolbarTools" type="button" role="menuitem">Clean and transform…</button>
-              <button id="toolbarValidate" type="button" role="menuitem">Validate data…</button>
+              <button id="ribbonDeleteRow" type="button" role="menuitem">${esc(s.deleteRow)}</button>
+              <button id="ribbonDeleteColumn" type="button" role="menuitem">${esc(s.deleteColumn)}</button>
               <span class="menu-separator" aria-hidden="true"></span>
-              <button id="ribbonZoomOut" type="button" role="menuitem">Zoom out</button>
-              <button id="ribbonZoomReset" type="button" role="menuitem">Reset zoom</button>
-              <button id="ribbonZoomIn" type="button" role="menuitem">Zoom in</button>
+              <button id="toolbarTools" type="button" role="menuitem">${esc(s.cleanTransform)}</button>
+              <button id="toolbarValidate" type="button" role="menuitem">${esc(s.validate)}</button>
               <span class="menu-separator" aria-hidden="true"></span>
-              <button id="viewTextButton" type="button" role="menuitem">Open as text</button>
-              <button id="toolbarTheme" type="button" role="menuitem">Theme: ${isDark ? 'Dark' : 'Light'}</button>
+              <button id="toggleHeaderButton" type="button" role="menuitemcheckbox" aria-checked="${headerShown ? 'true' : 'false'}">${esc(s.headerRow)}</button>
+              <button id="toggleSerialButton" type="button" role="menuitemcheckbox" aria-checked="${serialShown ? 'true' : 'false'}">${esc(s.rowNumbers)}</button>
+              <button id="changeDelimiterButton" type="button" role="menuitem">${esc(s.changeDelimiter)}<kbd>${esc(separatorLabel)}</kbd></button>
+              <span class="menu-separator" aria-hidden="true"></span>
+              <button id="ribbonZoomOut" type="button" role="menuitem">${esc(s.zoomOut)}<kbd>Ctrl+-</kbd></button>
+              <button id="ribbonZoomReset" type="button" role="menuitem">${esc(s.zoomReset)}<kbd>Ctrl+0</kbd></button>
+              <button id="ribbonZoomIn" type="button" role="menuitem">${esc(s.zoomIn)}<kbd>Ctrl+=</kbd></button>
+              <span class="menu-separator" aria-hidden="true"></span>
+              <button id="viewTextButton" type="button" role="menuitem">${esc(s.openAsText)}</button>
+              <button id="toolbarTheme" type="button" role="menuitem">${esc(themeLabel)}</button>
             </div>
           </details>
         </div>
         <span class="document-context" title="${this.escapeHtml(documentName)}">${this.escapeHtml(documentName)}</span>
       </header>
 
-      <div class="cell-bar" role="group" aria-label="Selected cell value">
-        <input id="formulaNameBox" class="cell-address" type="text" value="R1:C1" readonly aria-label="Active cell">
-        <textarea id="formulaInput" class="cell-input" rows="1" spellcheck="false" aria-label="Cell value" placeholder="Select a cell to edit its value"></textarea>
-        <button id="formulaCancel" class="cell-action" type="button" title="Cancel edit / 編集をキャンセル" aria-label="Cancel edit">×</button>
-        <button id="formulaApply" class="cell-action" type="button" title="Apply edit / 編集を確定" aria-label="Apply edit">✓</button>
+      <div class="cell-bar" role="group" aria-label="${esc(s.cellValue)}">
+        <input id="formulaNameBox" class="cell-address" type="text" value="" spellcheck="false" title="${esc(s.cellAddress)}" aria-label="${esc(s.cellAddress)}">
+        <textarea id="formulaInput" class="cell-input" rows="1" spellcheck="false" aria-label="${esc(s.cellValue)}" placeholder="${esc(s.cellPlaceholder)}" title="${esc(s.multilineHint)}"></textarea>
+        <span id="formulaMore" class="cell-more" aria-hidden="true"></span>
+        <button id="formulaCancel" class="cell-action" type="button" title="${esc(s.cancelEdit)}" aria-label="${esc(s.cancelEdit)}"><span class="codicon codicon-close" aria-hidden="true"></span></button>
+        <button id="formulaApply" class="cell-action" type="button" title="${esc(s.applyEdit)}" aria-label="${esc(s.applyEdit)}"><span class="codicon codicon-check" aria-hidden="true"></span></button>
       </div>
 
-      <div id="csv-root" class="table-container" data-sepcode="${sepCode}" data-fontsize="${fontSize}" data-rowcount="${rowCount}" data-columncount="${columnCount}" data-wheelzoomenabled="${mouseWheelZoomEnabled ? '1' : '0'}" data-wheelzoominvert="${mouseWheelZoomInvert ? '1' : '0'}" data-nextchunkstart="${nextChunkStart >= 0 ? nextChunkStart : ''}" data-hasmorechunks="${hasRemoteChunks ? '1' : '0'}">
+      <div id="csv-root" class="table-container" data-sepcode="${sepCode}" data-fontsize="${fontSize}" data-rowcount="${rowCount}" data-datarowcount="${dataRowCount}" data-columncount="${columnCount}" data-header="${headerShown ? '1' : '0'}" data-wheelzoomenabled="${mouseWheelZoomEnabled ? '1' : '0'}" data-wheelzoominvert="${mouseWheelZoomInvert ? '1' : '0'}" data-nextchunkstart="${nextChunkStart >= 0 ? nextChunkStart : ''}" data-hasmorechunks="${hasRemoteChunks ? '1' : '0'}">
         ${tableHtml}
       </div>
 
       <footer class="csv-status" role="status">
-        <span id="selectionStatus">No selection</span>
-        <span id="sizeStatus">${rowCount} rows · ${columnCount} columns</span>
+        <span id="selectionStatus">${esc(s.noSelection)}</span>
+        <span id="aggregateStatus"></span>
         <span id="visibleStatus"></span>
+        <span id="toastStatus" aria-live="polite"></span>
         <span class="status-spacer"></span>
-        <span title="Delimiter">${this.escapeHtml(separator === '\t' ? 'TAB' : separator)}</span>
+        <span id="sizeStatus">${esc(format(s.rowsColumns, { rows: dataRowCount, cols: columnCount }))}</span>
+        <button id="delimiterStatus" class="status-button" type="button" title="${esc(s.delimiter)}">${esc(separatorLabel)}</button>
         <span id="zoomStatus">100%</span>
       </footer>
     </div>
 
-    <aside id="csvPanel" class="csv-panel" aria-label="CSV Edit tools">
+    <aside id="csvPanel" class="csv-panel" aria-labelledby="csvPanelTitle">
       <div class="panel-heading">
-        <h2 id="csvPanelTitle">Data tools</h2>
-        <button id="csvPanelClose" class="panel-close" type="button" title="Close / 閉じる">×</button>
+        <h2 id="csvPanelTitle"></h2>
+        <button id="csvPanelClose" class="panel-close" type="button" title="${esc(s.close)} (Esc)" aria-label="${esc(s.close)}"><span class="codicon codicon-close" aria-hidden="true"></span></button>
       </div>
-      <div id="dataToolActions" class="panel-actions">
-        <button data-tool="trim">Trim whitespace</button>
-        <button data-tool="uppercase">UPPERCASE</button>
-        <button data-tool="lowercase">lowercase</button>
-        <button data-tool="fillEmpty">Fill empty</button>
-        <button data-tool="removeEmptyRows">Remove empty rows</button>
-        <button data-tool="removeDuplicates">Remove duplicates</button>
-      </div>
-      <div id="panelResults" aria-live="polite"></div>
+      <div id="panelBody" class="panel-body"></div>
     </aside>
 
+    <script id="__csvStrings" type="application/json" nonce="${nonce}">${stringsJson}</script>
     <script id="__csvChunks" type="application/json" nonce="${nonce}">${chunksJson}</script>
 
-    <div id="findReplaceWidget" class="replace-collapsed" role="group" aria-label="Find and Replace">
+    <div id="findReplaceWidget" class="replace-collapsed" role="group" aria-label="${esc(s.find)}">
       <div id="replaceToggleGutter" class="fr-gutter">
-        <button id="replaceToggle" class="fr-caret-btn" type="button" aria-label="Toggle Replace" aria-expanded="false"><span class="codicon codicon-chevron-right"></span></button>
+        <button id="replaceToggle" class="fr-caret-btn" type="button" title="${esc(s.toggleReplace)}" aria-label="${esc(s.toggleReplace)}" aria-expanded="false"><span class="codicon codicon-chevron-right"></span></button>
       </div>
       <div class="fr-content">
         <div class="fr-row fr-row-find">
           <div class="fr-input-wrap">
-            <input id="findInput" class="fr-input" type="text" placeholder="Find" aria-label="Find">
+            <input id="findInput" class="fr-input" type="text" placeholder="${esc(s.findPlaceholder)}" aria-label="${esc(s.findPlaceholder)}">
             <div class="fr-inline-toggles">
-              <button id="findCaseToggle" class="fr-toggle-btn" type="button" aria-label="Match Case" aria-pressed="false" title="Match Case">Aa</button>
-              <button id="findWordToggle" class="fr-toggle-btn" type="button" aria-label="Match Whole Word" aria-pressed="false" title="Match Whole Word">ab</button>
-              <button id="findRegexToggle" class="fr-toggle-btn" type="button" aria-label="Use Regular Expression" aria-pressed="false" title="Use Regular Expression">.*</button>
+              <button id="findCaseToggle" class="fr-toggle-btn" type="button" aria-label="${esc(s.matchCase)}" aria-pressed="false" title="${esc(s.matchCase)} (Alt+C)">Aa</button>
+              <button id="findWordToggle" class="fr-toggle-btn" type="button" aria-label="${esc(s.wholeWord)}" aria-pressed="false" title="${esc(s.wholeWord)} (Alt+W)">ab</button>
+              <button id="findRegexToggle" class="fr-toggle-btn" type="button" aria-label="${esc(s.useRegex)}" aria-pressed="false" title="${esc(s.useRegex)} (Alt+R)">.*</button>
             </div>
           </div>
-          <div id="findStatus" class="fr-status">No results</div>
+          <div id="findStatus" class="fr-status">${esc(s.noResults)}</div>
           <div class="fr-divider" aria-hidden="true"></div>
-          <button id="findPrev" class="fr-icon-btn" type="button" aria-label="Previous Match" title="Previous Match" disabled><span class="codicon codicon-chevron-up"></span></button>
-          <button id="findNext" class="fr-icon-btn" type="button" aria-label="Next Match" title="Next Match" disabled><span class="codicon codicon-chevron-down"></span></button>
-          <button id="findMenuButton" class="fr-icon-btn" type="button" aria-label="More Find Options" title="More Find Options"><span class="codicon codicon-ellipsis"></span></button>
-          <button id="findClose" class="fr-icon-btn fr-close-btn" type="button" aria-label="Close Find and Replace" title="Close"><span class="codicon codicon-close"></span></button>
+          <button id="findPrev" class="fr-icon-btn" type="button" aria-label="${esc(s.previousMatch)}" title="${esc(s.previousMatch)}" disabled><span class="codicon codicon-chevron-up"></span></button>
+          <button id="findNext" class="fr-icon-btn" type="button" aria-label="${esc(s.nextMatch)}" title="${esc(s.nextMatch)}" disabled><span class="codicon codicon-chevron-down"></span></button>
+          <button id="findClose" class="fr-icon-btn fr-close-btn" type="button" aria-label="${esc(s.close)}" title="${esc(s.close)} (Esc)"><span class="codicon codicon-close"></span></button>
         </div>
         <div class="fr-row fr-row-replace">
           <div class="fr-input-wrap">
-            <input id="replaceInput" class="fr-input" type="text" placeholder="Replace" aria-label="Replace">
+            <input id="replaceInput" class="fr-input" type="text" placeholder="${esc(s.replacePlaceholder)}" aria-label="${esc(s.replacePlaceholder)}">
             <div class="fr-inline-toggles">
-              <button id="replaceCaseToggle" class="fr-toggle-btn" type="button" aria-label="Preserve Case" aria-pressed="false" title="Preserve Case">AB</button>
+              <button id="replaceCaseToggle" class="fr-toggle-btn" type="button" aria-label="${esc(s.preserveCase)}" aria-pressed="false" title="${esc(s.preserveCase)}">AB</button>
             </div>
           </div>
           <div class="fr-actions">
-            <button id="replaceOne" class="fr-action-btn" type="button" aria-label="Replace" title="Replace" disabled><span class="codicon codicon-replace"></span></button>
-            <button id="replaceAll" class="fr-action-btn" type="button" aria-label="Replace All" title="Replace All" disabled><span class="codicon codicon-replace-all"></span></button>
+            <button id="replaceOne" class="fr-action-btn" type="button" aria-label="${esc(s.replaceOne)}" title="${esc(s.replaceOne)}" disabled><span class="codicon codicon-replace"></span></button>
+            <button id="replaceAll" class="fr-action-btn" type="button" aria-label="${esc(s.replaceAll)}" title="${esc(s.replaceAll)} (Ctrl+Alt+Enter)" disabled><span class="codicon codicon-replace-all"></span></button>
           </div>
-        </div>
-        <div id="findOverflowMenu" class="fr-overflow-menu" role="menu" aria-label="Find Options">
-          <button id="findOverflowSelection" class="fr-overflow-item" type="button" role="menuitem">Find in selection</button>
-          <button id="findOverflowDiacritics" class="fr-overflow-item" type="button" role="menuitem">Match diacritics</button>
-          <button id="findOverflowPreserveCase" class="fr-overflow-item" type="button" role="menuitem">Toggle preserve case</button>
         </div>
       </div>
     </div>
-    <div id="contextMenu"></div>
+    <div id="contextMenu" role="menu"></div>
 
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
